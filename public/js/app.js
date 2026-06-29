@@ -1,7 +1,7 @@
 // ============================================================================
-// Glowbook app — drives the SPA. Two modes:
-//   • /book/<slug>  → public storefront booking flow (anonymous)
-//   • everything else → auth → onboarding → dashboard (salon members)
+// Glowup Book app — drives the SPA. Two modes:
+//   • /<salon-slug>  → public storefront booking flow (anonymous)
+//   • / (root)       → auth → onboarding → dashboard (salon members)
 // ============================================================================
 const API = window.GlowbookAPI;
 
@@ -48,13 +48,29 @@ const fmtDate = (iso, tz) => new Date(iso).toLocaleDateString([], { weekday: 'sh
 // ===========================================================================
 // ROUTER
 // ===========================================================================
-function bookSlug() {
-  const m = location.pathname.match(/^\/book\/([a-z0-9-]+)\/?$/i);
-  return m ? m[1] : null;
+// The salon storefront lives at the root: glowupbook.com/<salon-slug>.
+// These top-level paths are reserved for the app itself, so no salon may use
+// them as a slug (enforced at signup too). Anything with a slash or dot is a
+// nested route or a static file, never a salon.
+const APP_DOMAIN = 'glowupbook.com';
+const RESERVED = new Set([
+  '', 'app', 'login', 'log-in', 'signin', 'sign-in', 'signup', 'sign-up',
+  'dashboard', 'admin', 'api', 'book', 'booking', 'about', 'pricing', 'terms',
+  'privacy', 'legal', 'help', 'support', 'contact', 'blog', 'settings',
+  'account', 'profile', 'assets', 'static', 'js', 'css', 'img', 'images',
+  'fonts', 'config', 'favicon', 'robots', 'sitemap', 'index', 'www', 'home',
+]);
+
+// Returns the salon slug if the current URL is a storefront, else null.
+function storefrontSlug() {
+  const seg = location.pathname.replace(/^\/+|\/+$/g, '');   // trim slashes
+  if (!seg || seg.includes('/') || seg.includes('.')) return null;  // root / nested / file
+  if (RESERVED.has(seg.toLowerCase())) return null;
+  return seg;
 }
 
 async function boot() {
-  const sl = bookSlug();
+  const sl = storefrontSlug();
   if (sl) return startStorefront(sl);
   startDashboardApp();
 }
@@ -140,15 +156,19 @@ function wireOnboarding() {
   async function checkSlug() {
     const s = slugIn.value;
     if (!s) { msg.textContent = ''; slugOk = false; return; }
+    if (RESERVED.has(s.toLowerCase())) {
+      slugOk = false; msg.textContent = '✗ that name is reserved — pick another'; msg.style.color = 'var(--bad)'; return;
+    }
     try {
       slugOk = await API.salons.slugAvailable(s);
-      msg.textContent = slugOk ? `✓ yourdomain.com/book/${s}` : '✗ that link is taken';
+      msg.textContent = slugOk ? `✓ ${APP_DOMAIN}/${s}` : '✗ that link is taken';
       msg.style.color = slugOk ? 'var(--mint)' : 'var(--bad)';
     } catch { /* offline */ }
   }
   $('#onb-form').onsubmit = async (e) => {
     e.preventDefault();
     if (!name.value.trim() || !slugIn.value) return toast('Name and link are required', true);
+    if (RESERVED.has(slugIn.value.toLowerCase())) return toast('That link name is reserved — pick another', true);
     try {
       state.salon = await API.salons.create({
         name: name.value.trim(), slug: slugIn.value, businessType: $('#onb-type').value,
@@ -164,7 +184,7 @@ function wireOnboarding() {
 function wireAppShell() {
   $$('.nav-item[data-page]').forEach((b) => (b.onclick = () => navigate(b.dataset.page)));
   $('#signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
-  const link = `${location.origin}/book/${state.salon.slug}`;
+  const link = `${location.origin}/${state.salon.slug}`;
   $('#view-storefront').href = link;
 }
 
@@ -493,7 +513,7 @@ async function openHoursModal(s, refresh) {
 PAGES.settings = async (root) => {
   const s = state.salon;
   root.append(el('div', { class: 'page-head' }, el('h1', {}, 'Settings')));
-  const link = `${location.origin}/book/${s.slug}`;
+  const link = `${location.origin}/${s.slug}`;
   const f = {};
   const card = el('div', { class: 'card', style: 'max-width:560px' },
     el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px' },

@@ -1,13 +1,12 @@
-﻿-- Combined migrations (run in Supabase SQL Editor). Generated from migrations/.
+-- Glowup Book - combined migrations. Run this whole file in the Supabase SQL Editor.
 
--- ===== 0001_init.sql =====
 -- ============================================================================
--- Glowbook â€” initial schema
+-- Glowbook — initial schema
 -- Multi-tenant booking CRM for salons / barbers / hairdressers / nail studios.
 --
 -- Each salon is a tenant. Staff log in via Supabase Auth; their access is scoped
 -- to the salon(s) they belong to. The PUBLIC storefront is anonymous: visitors
--- never query appointment rows directly â€” availability and booking go through
+-- never query appointment rows directly — availability and booking go through
 -- SECURITY DEFINER RPCs (see 0002) so no customer data leaks to the browser.
 --
 -- Security model: the browser talks to Postgres directly through Supabase, so
@@ -155,7 +154,7 @@ create policy "members: manage"  on public.salon_members for all
   using (public.is_salon_manager(salon_id)) with check (public.is_salon_manager(salon_id));
 
 -- ===========================================================================
--- STAFF (service providers â€” may or may not have a login)
+-- STAFF (service providers — may or may not have a login)
 -- ===========================================================================
 create table public.staff (
   id          uuid primary key default gen_random_uuid(),
@@ -298,7 +297,7 @@ create policy "time_off: manager write" on public.time_off for all
   using (public.is_salon_manager(salon_id)) with check (public.is_salon_manager(salon_id));
 
 -- ===========================================================================
--- CUSTOMERS (private to the salon â€” NEVER public)
+-- CUSTOMERS (private to the salon — NEVER public)
 -- ===========================================================================
 create table public.customers (
   id          uuid primary key default gen_random_uuid(),
@@ -323,7 +322,7 @@ create policy "customers: member write" on public.customers for all
   using (public.is_salon_member(salon_id)) with check (public.is_salon_member(salon_id));
 
 -- ===========================================================================
--- APPOINTMENTS (private to the salon â€” NEVER public)
+-- APPOINTMENTS (private to the salon — NEVER public)
 -- ===========================================================================
 create table public.appointments (
   id           uuid primary key default gen_random_uuid(),
@@ -352,9 +351,8 @@ create policy "appointments: member read"  on public.appointments for select usi
 create policy "appointments: member write" on public.appointments for all
   using (public.is_salon_member(salon_id)) with check (public.is_salon_member(salon_id));
 
--- ===== 0002_booking_rpcs.sql =====
 -- ============================================================================
--- Glowbook â€” public booking RPCs
+-- Glowbook — public booking RPCs
 --
 -- The storefront is anonymous. We deliberately do NOT give anon read access to
 -- appointments/customers. Instead, two SECURITY DEFINER functions provide a
