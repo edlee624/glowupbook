@@ -69,10 +69,16 @@ function storefrontSlug() {
   return seg;
 }
 
+// Owner area lives at these paths; the root and anything else public shows the
+// salon directory.
+const APP_PATHS = new Set(['app', 'login', 'log-in', 'signin', 'sign-in', 'dashboard', 'admin', 'account']);
+
 async function boot() {
   const sl = storefrontSlug();
   if (sl) return startStorefront(sl);
-  startDashboardApp();
+  const p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (APP_PATHS.has(p)) return startDashboardApp();
+  startDirectory();   // root (and any other public path) → directory
 }
 
 // ===========================================================================
@@ -551,6 +557,44 @@ PAGES.settings = async (root) => {
     catch (e) { errToast(e); }
   }
 };
+
+// ===========================================================================
+// PUBLIC DIRECTORY (homepage at /)
+// ===========================================================================
+const TYPE_LABELS = { hair: 'Hair salon', barber: 'Barber shop', nails: 'Nail studio', beauty: 'Beauty & spa' };
+
+async function startDirectory() {
+  show('#screen-directory');
+  const grid = $('#dir-grid'), q = $('#dir-q'), type = $('#dir-type');
+  let t;
+  async function load() {
+    grid.innerHTML = '<p class="muted">Loading salons…</p>';
+    if (!API.enabled) { grid.innerHTML = ''; grid.append(el('div', { class: 'banner' }, 'Directory not connected to a backend yet.')); return; }
+    let salons = [];
+    try { salons = await API.storefront.directory({ search: q.value.trim(), type: type.value }); }
+    catch (e) { grid.innerHTML = ''; return errToast(e); }
+    grid.innerHTML = '';
+    if (!salons.length) {
+      const msg = (q.value.trim() || type.value) ? 'No salons match your search.' : 'No salons are listed yet — be the first to add yours!';
+      grid.append(el('div', { class: 'empty', style: 'grid-column:1/-1' }, msg));
+      return;
+    }
+    salons.forEach((s) => grid.append(salonCard(s)));
+  }
+  q.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
+  type.onchange = load;
+  load();
+}
+
+function salonCard(s) {
+  return el('a', { class: 'salon-card', href: `/${s.slug}` },
+    el('div', { class: 'cover', style: s.cover_url ? `background-image:url('${s.cover_url}')` : '' }),
+    el('div', { class: 'body' },
+      el('h3', {}, s.name),
+      el('div', { class: 'meta' }, [s.city, s.address].filter(Boolean).join(' · ') || 'Book online'),
+      el('span', { class: 'type-pill' }, TYPE_LABELS[s.business_type] || 'Salon'),
+    ));
+}
 
 // ===========================================================================
 // PUBLIC STOREFRONT

@@ -134,6 +134,30 @@
   .stepbar .s.on{background:var(--plum);}
 
   .banner{background:#FFF4E0;border:1px solid var(--amber);color:#8a5a00;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:18px;}
+  .store-back{display:inline-block;margin-bottom:14px;text-decoration:none;font-size:14px;}
+
+  /* ---- directory (homepage) ---- */
+  #screen-directory{display:none;}
+  #screen-directory.active{display:block;}
+  .dir-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1100px;margin:0 auto;}
+  .dir-hero{text-align:center;padding:46px 20px 30px;background:
+      radial-gradient(circle at 15% 0%,rgba(108,74,182,.14),transparent 45%),
+      radial-gradient(circle at 85% 100%,rgba(255,111,165,.14),transparent 45%);}
+  .dir-hero h1{font-size:40px;max-width:760px;margin:0 auto;}
+  .dir-hero p{color:var(--grey);font-size:17px;margin:14px auto 22px;}
+  .dir-search{display:flex;gap:10px;max-width:560px;margin:0 auto;}
+  .dir-search input{flex:2;} .dir-search select{flex:1;}
+  .dir-wrap{max-width:1100px;margin:0 auto;padding:14px 24px 50px;}
+  .dir-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:18px;}
+  .salon-card{display:block;text-decoration:none;color:inherit;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:#fff;transition:transform .12s,box-shadow .12s;}
+  .salon-card:hover{transform:translateY(-3px);box-shadow:var(--shadow);}
+  .salon-card .cover{height:120px;background:linear-gradient(135deg,var(--plum),var(--pink));background-size:cover;background-position:center;}
+  .salon-card .body{padding:14px 16px;}
+  .salon-card h3{font-size:19px;margin-bottom:4px;}
+  .salon-card .meta{color:var(--grey);font-size:13px;}
+  .salon-card .type-pill{display:inline-block;margin-top:10px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--paper-dim);color:var(--ink);}
+  .dir-foot{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto;padding:20px 24px 40px;border-top:1px solid var(--line);}
+  @media(max-width:560px){ .dir-hero h1{font-size:30px;} .dir-search{flex-direction:column;} }
 
   @media(max-width:760px){
     #screen-app.active{grid-template-columns:1fr;}
@@ -218,9 +242,39 @@
   <main class="main" id="page"></main>
 </section>
 
+<!-- ====================== PUBLIC DIRECTORY (homepage) ====================== -->
+<section id="screen-directory" class="screen">
+  <header class="dir-nav">
+    <div class="brand"><span class="dot"></span> Glowup Book</div>
+    <a class="btn ghost sm" href="/app">For salon owners →</a>
+  </header>
+  <div class="dir-hero">
+    <h1>Find &amp; book beauty and nail salons near you</h1>
+    <p>Browse local salons, barbers and nail studios — and book in seconds.</p>
+    <div class="dir-search">
+      <input id="dir-q" placeholder="Search by name or city…">
+      <select id="dir-type">
+        <option value="">All types</option>
+        <option value="hair">Hair salons</option>
+        <option value="barber">Barber shops</option>
+        <option value="nails">Nail studios</option>
+        <option value="beauty">Beauty &amp; spa</option>
+      </select>
+    </div>
+  </div>
+  <div class="dir-wrap"><div id="dir-grid" class="dir-grid"></div></div>
+  <footer class="dir-foot">
+    <span class="muted">© Glowup Book</span>
+    <a href="/app">List your salon</a>
+  </footer>
+</section>
+
 <!-- ====================== PUBLIC STOREFRONT ====================== -->
 <section id="screen-store" class="screen">
-  <div class="store-wrap" id="store-body"></div>
+  <div class="store-wrap">
+    <a href="/" class="store-back muted">‹ All salons</a>
+    <div id="store-body"></div>
+  </div>
 </section>
 
 <div id="modal-root"></div>

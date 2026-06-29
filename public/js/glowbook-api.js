@@ -208,6 +208,15 @@ const appointments = {
 
 // ---- Public storefront (anonymous) ---------------------------------------
 const storefront = {
+  // Public directory of published salons (RLS only returns is_published rows).
+  async directory({ search, type } = {}) {
+    let q = client().from('salons')
+      .select('id,name,slug,business_type,about,city,address,logo_url,cover_url')
+      .eq('is_published', true).order('name');
+    if (type) q = q.eq('business_type', type);
+    if (search) q = q.or(`name.ilike.%${search}%,city.ilike.%${search}%,about.ilike.%${search}%`);
+    return unwrap(await q) || [];
+  },
   // Public salon profile by slug (only returns rows for published salons via RLS).
   async salon(slug) {
     const data = unwrap(await client().from('salons').select('*').eq('slug', slug).eq('is_published', true).limit(1));
