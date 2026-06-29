@@ -143,6 +143,7 @@ function wireAuthScreen() {
     try { await API.auth.sendPasswordReset(email); toast('Password reset email sent'); }
     catch (err) { errToast(err); }
   };
+  setMode('login');   // apply initial state so the name field is hidden on load
 }
 
 // ---- onboarding -----------------------------------------------------------
