@@ -30,10 +30,12 @@ function unwrap({ data, error }) {
 
 // ---- Auth -----------------------------------------------------------------
 const auth = {
-  async signUp({ email, password, fullName }) {
+  // role: 'owner' (salon owner, signs up at /app) | 'customer' (signs up on the
+  // public directory). Employees are NOT created via signup.
+  async signUp({ email, password, fullName, role = 'owner' }) {
     return unwrap(await client().auth.signUp({
       email, password,
-      options: { data: { full_name: fullName || '', role: 'owner' } },
+      options: { data: { full_name: fullName || '', role } },
     }));
   },
   async signIn({ email, password }) {
@@ -57,6 +59,14 @@ const auth = {
     if (!supabase) return null;
     const { data } = await supabase.auth.getUser();
     return data?.user || null;
+  },
+  // The profiles row for the current user (role, full_name, ...), or null.
+  async profile() {
+    if (!supabase) return null;
+    const u = await this.currentUser();
+    if (!u) return null;
+    const data = unwrap(await client().from('profiles').select('*').eq('id', u.id).limit(1));
+    return (data || [])[0] || null;
   },
   onChange(cb) {
     if (!supabase) return () => {};
@@ -253,8 +263,19 @@ const storefront = {
   },
 };
 
+// ---- Logged-in customer (their own bookings across all salons) ------------
+const customer = {
+  async myBookings() {
+    return unwrap(await client().rpc('my_appointments')) || [];
+  },
+  async cancel(apptId) {
+    const { error } = await client().rpc('cancel_my_appointment', { p_appt: apptId });
+    if (error) throw error;
+  },
+};
+
 window.GlowbookAPI = {
   enabled,
   raw: supabase,
-  auth, salons, services, staff, hours, customers, appointments, storefront,
+  auth, salons, services, staff, hours, customers, appointments, storefront, customer,
 };

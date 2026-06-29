@@ -140,6 +140,8 @@
   #screen-directory{display:none;}
   #screen-directory.active{display:block;}
   .dir-nav{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;max-width:1100px;margin:0 auto;}
+  .dir-auth{display:flex;align-items:center;gap:10px;}
+  .dir-auth .who{font-size:14px;font-weight:600;}
   .dir-hero{text-align:center;padding:46px 20px 30px;background:
       radial-gradient(circle at 15% 0%,rgba(108,74,182,.14),transparent 45%),
       radial-gradient(circle at 85% 100%,rgba(255,111,165,.14),transparent 45%);}
@@ -245,8 +247,8 @@
 <!-- ====================== PUBLIC DIRECTORY (homepage) ====================== -->
 <section id="screen-directory" class="screen">
   <header class="dir-nav">
-    <div class="brand"><span class="dot"></span> Glowup Book</div>
-    <a class="btn ghost sm" href="/app">For salon owners →</a>
+    <a class="brand" href="/" style="text-decoration:none;color:inherit"><span class="dot"></span> Glowup Book</a>
+    <div class="dir-auth" id="dir-auth"></div>
   </header>
   <div class="dir-hero">
     <h1>Find &amp; book beauty and nail salons near you</h1>

@@ -107,7 +107,12 @@ function startDashboardApp() {
 async function afterLogin() {
   try {
     const mine = await API.salons.mine();
-    if (!mine.length) { wireOnboarding(); show('#screen-onboarding'); return; }
+    if (!mine.length) {
+      // A customer account has no salon — send them to the public directory.
+      const prof = await API.auth.profile();
+      if (prof?.role === 'customer') { location.href = '/'; return; }
+      wireOnboarding(); show('#screen-onboarding'); return;
+    }
     state.salon = mine[0];
     wireAppShell();
     show('#screen-app');
@@ -565,6 +570,7 @@ const TYPE_LABELS = { hair: 'Hair salon', barber: 'Barber shop', nails: 'Nail st
 
 async function startDirectory() {
   show('#screen-directory');
+  renderDirAuth();
   const grid = $('#dir-grid'), q = $('#dir-q'), type = $('#dir-type');
   let t;
   async function load() {
@@ -584,6 +590,95 @@ async function startDirectory() {
   q.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   type.onchange = load;
   load();
+}
+
+// Directory header auth area: customer log in / sign up, or account + bookings.
+async function renderDirAuth() {
+  const box = $('#dir-auth');
+  if (!box) return;
+  box.innerHTML = '';
+  let user = null, prof = null;
+  if (API.enabled) { try { user = await API.auth.currentUser(); if (user) prof = await API.auth.profile(); } catch { /* offline */ } }
+  if (user) {
+    box.append(
+      el('button', { class: 'btn ghost sm', onclick: openMyBookings }, '📅 My bookings'),
+      el('span', { class: 'who' }, prof?.full_name || user.email),
+      el('button', { class: 'btn ghost sm', onclick: async () => { await API.auth.signOut(); location.reload(); } }, 'Sign out'),
+    );
+  } else {
+    box.append(
+      el('button', { class: 'btn sm', onclick: () => openCustomerAuth(renderDirAuth) }, 'Log in / Sign up'),
+      el('a', { class: 'btn ghost sm', href: '/app' }, 'For salon owners →'),
+    );
+  }
+}
+
+function openCustomerAuth(onDone) {
+  let mode = 'login';
+  const f = {};
+  const nameField = field('Your name', f.name = el('input', { autocomplete: 'name' }));
+  const submitBtn = el('button', { class: 'btn block', onclick: submit }, 'Log in');
+  const tabLogin = el('button', { class: 'on' }, 'Log in');
+  const tabSignup = el('button', {}, 'Sign up');
+  const wrap = el('div', {},
+    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Create a free account to book and manage your appointments at any salon.'),
+    el('div', { class: 'tabs' }, tabLogin, tabSignup),
+    nameField,
+    field('Email', f.email = el('input', { type: 'email', autocomplete: 'email' })),
+    field('Password', f.pass = el('input', { type: 'password' })),
+    submitBtn,
+  );
+  const setMode = (m) => {
+    mode = m;
+    tabLogin.classList.toggle('on', m === 'login');
+    tabSignup.classList.toggle('on', m === 'signup');
+    nameField.classList.toggle('hidden', m === 'login');
+    submitBtn.textContent = m === 'login' ? 'Log in' : 'Create account';
+  };
+  tabLogin.onclick = () => setMode('login');
+  tabSignup.onclick = () => setMode('signup');
+  setMode('login');
+  const close = modal('Customer account', wrap);
+  async function submit() {
+    const email = f.email.value.trim(), password = f.pass.value;
+    if (!email || !password) return toast('Enter email and password', true);
+    try {
+      if (mode === 'signup') {
+        await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role: 'customer' });
+        toast('Account created! Check your email if confirmation is on.');
+      } else {
+        await API.auth.signIn({ email, password });
+        toast('Welcome back!');
+      }
+      close(); if (onDone) onDone();
+    } catch (e) { errToast(e); }
+  }
+}
+
+async function openMyBookings() {
+  const wrap = el('div', {}, el('p', { class: 'muted' }, 'Loading…'));
+  const close = modal('My bookings', wrap, { wide: true });
+  let list = [];
+  try { list = await API.customer.myBookings(); }
+  catch (e) { wrap.innerHTML = ''; wrap.append(el('div', { class: 'banner' }, e.message)); return; }
+  wrap.innerHTML = '';
+  if (!list.length) { wrap.append(el('div', { class: 'empty' }, 'No bookings yet. Browse salons and book your first appointment!')); return; }
+  list.forEach((b) => {
+    const upcoming = new Date(b.starts_at) > new Date() && b.status !== 'cancelled';
+    wrap.append(el('div', { class: 'choice', style: 'cursor:default' },
+      el('div', {},
+        el('strong', {}, b.service_name || 'Appointment'),
+        el('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 6px' },
+          `${b.salon_name} · ${new Date(b.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}${b.staff_name ? ' · ' + b.staff_name : ''}`),
+        statusPill(b.status)),
+      upcoming
+        ? el('button', { class: 'btn danger sm', onclick: async () => {
+            if (!confirm('Cancel this booking?')) return;
+            try { await API.customer.cancel(b.id); close(); openMyBookings(); toast('Booking cancelled'); } catch (e) { errToast(e); }
+          } }, 'Cancel')
+        : el('span', {}),
+    ));
+  });
 }
 
 function salonCard(s) {
@@ -689,6 +784,15 @@ async function startStorefront(sl) {
       field('Phone', f.phone = el('input', { autocomplete: 'tel' })),
       field('Notes (optional)', f.notes = el('textarea', { rows: 2 })),
       el('button', { class: 'btn block', onclick: confirmBooking }, 'Confirm booking')));
+    // Prefill for a logged-in customer so they don't retype their details.
+    if (API.enabled) (async () => {
+      try {
+        const u = await API.auth.currentUser(); if (!u) return;
+        const p = await API.auth.profile();
+        if (!f.name.value) f.name.value = p?.full_name || '';
+        if (!f.email.value) f.email.value = u.email || '';
+      } catch { /* ignore */ }
+    })();
     async function confirmBooking() {
       if (!f.name.value.trim()) return toast('Please enter your name', true);
       try {
