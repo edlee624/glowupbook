@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Glowup Book — booking & CRM for salons</title>
+<meta name="description" content="Glowup Book is the booking system and CRM for salons, barbers, hairdressers and nail studios — manage appointments and customers, and take bookings online.">
+<meta name="theme-color" content="#1d1b2e">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400..800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1d1b2e;
+    --ink-soft:#2a2740;
+    --paper:#FAF8F5;
+    --paper-dim:#F0ECE6;
+    --plum:#6C4AB6;
+    --plum-dim:#5a3da0;
+    --pink:#FF6FA5;
+    --mint:#2BB6A3;
+    --amber:#F5A524;
+    --grey:#8B8898;
+    --line:rgba(29,27,46,0.10);
+    --line-soft:rgba(250,248,245,0.14);
+    --ok:#2BB6A3; --warn:#F5A524; --bad:#E5484D;
+    --radius:16px;
+    --shadow:0 18px 50px -22px rgba(29,27,46,0.45);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--paper);
+    min-height:100vh;
+  }
+  h1,h2,h3{font-family:'Fraunces',Georgia,serif;font-weight:600;line-height:1.1;margin:0;}
+  a{color:var(--plum);}
+  button{font-family:inherit;cursor:pointer;}
+  .hidden{display:none !important;}
+
+  /* ---- buttons & inputs ---- */
+  .btn{border:none;border-radius:12px;padding:11px 18px;font-weight:600;font-size:14px;background:var(--plum);color:#fff;transition:filter .15s, transform .05s;}
+  .btn:hover{filter:brightness(1.07);}
+  .btn:active{transform:translateY(1px);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line);}
+  .btn.ghost:hover{background:var(--paper-dim);filter:none;}
+  .btn.pink{background:var(--pink);} .btn.mint{background:var(--mint);}
+  .btn.danger{background:transparent;color:var(--bad);border:1px solid rgba(229,72,77,.4);}
+  .btn.sm{padding:7px 12px;font-size:13px;border-radius:10px;}
+  .btn.block{display:block;width:100%;}
+  label{display:block;font-size:13px;font-weight:600;margin:0 0 5px;color:var(--ink);}
+  input,select,textarea{
+    width:100%;font-family:inherit;font-size:14px;padding:10px 12px;border:1px solid var(--line);
+    border-radius:10px;background:#fff;color:var(--ink);outline:none;
+  }
+  input:focus,select:focus,textarea:focus{border-color:var(--plum);box-shadow:0 0 0 3px rgba(108,74,182,.15);}
+  .field{margin-bottom:14px;}
+  .row{display:flex;gap:12px;}.row>*{flex:1;}
+  .muted{color:var(--grey);}
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;}
+  .card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:18px;}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:12px 18px;border-radius:12px;font-size:14px;box-shadow:var(--shadow);z-index:200;opacity:0;transition:opacity .2s, transform .2s;pointer-events:none;}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-4px);}
+  .toast.bad{background:var(--bad);}
+
+  /* ---- screens ---- */
+  .screen{display:none;}
+  .screen.active{display:block;}
+
+  /* ---- auth ---- */
+  #screen-auth{min-height:100vh;display:none;align-items:center;justify-content:center;padding:24px;
+    background:radial-gradient(circle at 12% 0%,rgba(108,74,182,.18),transparent 42%),
+               radial-gradient(circle at 90% 100%,rgba(255,111,165,.16),transparent 42%);}
+  #screen-auth.active{display:flex;}
+  .auth-card{width:100%;max-width:400px;background:#fff;border-radius:22px;padding:30px;box-shadow:var(--shadow);}
+  .brand{display:flex;align-items:center;gap:9px;font-family:'Fraunces',serif;font-weight:700;font-size:22px;}
+  .brand .dot{width:13px;height:13px;border-radius:50%;background:linear-gradient(135deg,var(--plum),var(--pink));}
+  .tabs{display:flex;gap:6px;background:var(--paper-dim);padding:4px;border-radius:12px;margin:18px 0;}
+  .tabs button{flex:1;border:none;background:transparent;padding:8px;border-radius:9px;font-weight:600;font-size:14px;color:var(--grey);}
+  .tabs button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08);}
+
+  /* ---- app shell ---- */
+  #screen-app{display:none;min-height:100vh;}
+  #screen-app.active{display:grid;grid-template-columns:230px 1fr;}
+  .sidebar{background:var(--ink);color:var(--paper);padding:20px 14px;display:flex;flex-direction:column;gap:4px;min-height:100vh;position:sticky;top:0;}
+  .sidebar .brand{color:var(--paper);margin-bottom:14px;padding:0 8px;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:var(--paper);text-decoration:none;font-weight:500;font-size:14px;border:none;background:transparent;text-align:left;width:100%;opacity:.78;}
+  .nav-item:hover{background:var(--ink-soft);opacity:1;}
+  .nav-item.on{background:var(--plum);opacity:1;}
+  .nav-spacer{flex:1;}
+  .main{padding:26px 30px;max-width:1100px;}
+  .page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;flex-wrap:wrap;}
+  .page-head h1{font-size:26px;}
+  table{width:100%;border-collapse:collapse;}
+  th,td{text-align:left;padding:11px 10px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle;}
+  th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--grey);}
+  tr:hover td{background:var(--paper-dim);}
+  .empty{padding:40px;text-align:center;color:var(--grey);}
+
+  /* ---- modal ---- */
+  .modal-bg{position:fixed;inset:0;background:rgba(29,27,46,.5);display:flex;align-items:center;justify-content:center;padding:20px;z-index:100;}
+  .modal{background:#fff;border-radius:18px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow:auto;box-shadow:var(--shadow);}
+  .modal h2{font-size:21px;margin-bottom:16px;}
+
+  /* ---- calendar (day view) ---- */
+  .cal-controls{display:flex;align-items:center;gap:10px;}
+  .day-grid{position:relative;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff;}
+  .hour-row{display:grid;grid-template-columns:64px 1fr;border-bottom:1px solid var(--line);height:56px;}
+  .hour-row:last-child{border-bottom:none;}
+  .hour-label{font-size:12px;color:var(--grey);padding:4px 8px;border-right:1px solid var(--line);}
+  .appt{background:linear-gradient(135deg,var(--plum),var(--plum-dim));color:#fff;border-radius:8px;padding:6px 9px;font-size:12px;margin:3px 6px;cursor:pointer;}
+  .appt.cancelled{opacity:.5;text-decoration:line-through;}
+  .appt .who{font-weight:600;}
+
+  /* ---- storefront ---- */
+  #screen-store{display:none;min-height:100vh;background:var(--paper);}
+  #screen-store.active{display:block;}
+  .store-wrap{max-width:760px;margin:0 auto;padding:24px 18px 60px;}
+  .store-hero{border-radius:20px;padding:30px;color:#fff;background:linear-gradient(135deg,var(--plum),var(--pink));box-shadow:var(--shadow);}
+  .store-hero h1{font-size:30px;color:#fff;}
+  .step{margin-top:22px;}
+  .step h3{font-size:18px;margin-bottom:12px;}
+  .choice{display:flex;justify-content:space-between;align-items:center;gap:12px;border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;margin-bottom:10px;cursor:pointer;transition:border-color .15s,box-shadow .15s;}
+  .choice:hover{border-color:var(--plum);}
+  .choice.sel{border-color:var(--plum);box-shadow:0 0 0 3px rgba(108,74,182,.15);}
+  .slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;}
+  .slot{border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center;font-size:14px;font-weight:600;background:#fff;}
+  .slot:hover{border-color:var(--plum);}
+  .slot.sel{background:var(--plum);color:#fff;border-color:var(--plum);}
+  .stepbar{display:flex;gap:6px;margin-bottom:6px;}
+  .stepbar .s{flex:1;height:4px;border-radius:2px;background:var(--paper-dim);}
+  .stepbar .s.on{background:var(--plum);}
+
+  .banner{background:#FFF4E0;border:1px solid var(--amber);color:#8a5a00;border-radius:12px;padding:12px 14px;font-size:13px;margin-bottom:18px;}
+
+  @media(max-width:760px){
+    #screen-app.active{grid-template-columns:1fr;}
+    .sidebar{flex-direction:row;flex-wrap:wrap;position:static;min-height:auto;}
+    .nav-spacer{display:none;}
+    .main{padding:18px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================ AUTH ============================ -->
+<section id="screen-auth" class="screen">
+  <div class="auth-card">
+    <div class="brand"><span class="dot"></span> Glowup Book</div>
+    <p class="muted" style="margin:10px 0 0;font-size:14px;">Booking & CRM for salons, barbers, and nail studios.</p>
+    <div class="tabs">
+      <button id="tab-login" class="on">Log in</button>
+      <button id="tab-signup">Sign up</button>
+    </div>
+    <div id="cfg-banner" class="banner hidden">Backend not connected yet. Add your Supabase URL + anon key to <code>public/config.js</code> to enable accounts.</div>
+    <form id="auth-form">
+      <div class="field" id="name-field"><label>Your name</label><input id="au-name" autocomplete="name" placeholder="Alex Rivera"></div>
+      <div class="field"><label>Email</label><input id="au-email" type="email" autocomplete="email" placeholder="you@salon.com"></div>
+      <div class="field"><label>Password</label><input id="au-pass" type="password" autocomplete="current-password" placeholder="••••••••"></div>
+      <button class="btn block" id="au-submit" type="submit">Log in</button>
+    </form>
+    <p style="text-align:center;margin:14px 0 0;font-size:13px;"><a href="#" id="forgot">Forgot password?</a></p>
+  </div>
+</section>
+
+<!-- ====================== ONBOARDING (create salon) ====================== -->
+<section id="screen-onboarding" class="screen">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+    <div class="auth-card" style="max-width:460px;">
+      <div class="brand"><span class="dot"></span> Glowup Book</div>
+      <h1 style="font-size:24px;margin:16px 0 4px;">Set up your salon</h1>
+      <p class="muted" style="font-size:14px;margin:0 0 18px;">This creates your dashboard and your public booking page.</p>
+      <form id="onb-form">
+        <div class="field"><label>Business name</label><input id="onb-name" placeholder="Glow Hair Studio" required></div>
+        <div class="row">
+          <div class="field"><label>Type</label>
+            <select id="onb-type">
+              <option value="hair">Hair salon</option>
+              <option value="barber">Barber shop</option>
+              <option value="nails">Nail studio</option>
+              <option value="beauty">Beauty / spa</option>
+            </select>
+          </div>
+          <div class="field"><label>Currency</label>
+            <select id="onb-currency"><option>USD</option><option>EUR</option><option>GBP</option><option>CAD</option><option>AUD</option></select>
+          </div>
+        </div>
+        <div class="field"><label>Booking page link</label>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <span class="muted" style="font-size:13px;white-space:nowrap;">/book/</span>
+            <input id="onb-slug" placeholder="glow-hair-studio" required>
+          </div>
+          <small id="slug-msg" class="muted"></small>
+        </div>
+        <div class="field"><label>Timezone</label><input id="onb-tz" placeholder="America/New_York"></div>
+        <button class="btn block" type="submit">Create salon →</button>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ APP ============================ -->
+<section id="screen-app" class="screen">
+  <aside class="sidebar">
+    <div class="brand"><span class="dot"></span> Glowup Book</div>
+    <button class="nav-item on" data-page="calendar">📅 Calendar</button>
+    <button class="nav-item" data-page="appointments">📋 Appointments</button>
+    <button class="nav-item" data-page="customers">👥 Customers</button>
+    <button class="nav-item" data-page="services">✂️ Services</button>
+    <button class="nav-item" data-page="staff">💇 Staff</button>
+    <button class="nav-item" data-page="settings">⚙️ Settings</button>
+    <div class="nav-spacer"></div>
+    <a class="nav-item" id="view-storefront" target="_blank">🔗 View booking page</a>
+    <button class="nav-item" id="signout">↩︎ Sign out</button>
+  </aside>
+  <main class="main" id="page"></main>
+</section>
+
+<!-- ====================== PUBLIC STOREFRONT ====================== -->
+<section id="screen-store" class="screen">
+  <div class="store-wrap" id="store-body"></div>
+</section>
+
+<div id="modal-root"></div>
+<div id="toast" class="toast"></div>
+
+<!-- Supabase client (self-hosted) then config then API, then app -->
+<script src="/js/vendor/supabase.umd.js"></script>
+<script src="/config.js"></script>
+<script type="module" src="/js/glowbook-api.js"></script>
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
