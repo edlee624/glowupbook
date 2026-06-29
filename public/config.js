@@ -1,7 +1,7 @@
-// Local/placeholder config. Replace these with your real Supabase project values
-// (Project Settings → API). Both are PUBLIC values, gated by RLS — safe to ship.
-// Until these are filled in, the app runs in "backend not configured" mode.
+// Supabase connection for Glowup Book. Both values are PUBLIC and gated by the
+// Row Level Security policies in supabase/migrations — safe to ship to the
+// browser and commit. Never put the secret (service_role) key here.
 window.GLOWBOOK_CONFIG = {
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
+  SUPABASE_URL: 'https://jlgtpvfvdxgsbpjakqkj.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_Vl--EgvqNE7LldP8PY7LhQ_W-iUryaF',
 };
