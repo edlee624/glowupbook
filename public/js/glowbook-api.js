@@ -335,6 +335,12 @@ const storefront = {
     const data = unwrap(await client().rpc('salon_rating', { p_salon: salonId }));
     return (data || [])[0] || { avg_rating: null, review_count: 0 };
   },
+  // Public portfolio photos for a salon (for the storefront gallery).
+  async portfolio(salonId, limit = 12) {
+    const rows = unwrap(await client().from('portfolio').select('id,path,caption')
+      .eq('salon_id', salonId).eq('is_public', true).order('created_at', { ascending: false }).limit(limit)) || [];
+    return rows.map((r) => ({ ...r, url: client().storage.from('portfolio').getPublicUrl(r.path).data.publicUrl }));
+  },
 };
 
 // ---- Logged-in customer (their own bookings across all salons) ------------
@@ -387,6 +393,27 @@ const customer = {
 const employee = {
   async myAppointments() {
     return unwrap(await client().rpc('my_staff_appointments')) || [];
+  },
+  photoUrl(path) {
+    return client().storage.from('portfolio').getPublicUrl(path).data.publicUrl;
+  },
+  async myPortfolio() {
+    const u = await auth.currentUser();
+    const rows = unwrap(await client().from('portfolio').select('*').eq('profile_id', u.id).order('created_at', { ascending: false })) || [];
+    return rows.map((r) => ({ ...r, url: this.photoUrl(r.path) }));
+  },
+  async uploadPhoto(file, { salonId = null, caption = null, appointmentId = null } = {}) {
+    const u = await auth.currentUser();
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const path = `${u.id}/${new Date().getTime()}-${Math.round(Math.random() * 1e6)}.${ext}`;
+    const up = await client().storage.from('portfolio').upload(path, file, { upsert: false, contentType: file.type || undefined });
+    if (up.error) throw up.error;
+    return unwrap(await client().from('portfolio').insert({ profile_id: u.id, salon_id: salonId, caption, appointment_id: appointmentId, path }).select().single());
+  },
+  async removePhoto(row) {
+    await client().storage.from('portfolio').remove([row.path]).catch(() => {});
+    const { error } = await client().from('portfolio').delete().eq('id', row.id);
+    if (error) throw error;
   },
 };
 

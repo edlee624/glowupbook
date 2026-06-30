@@ -201,33 +201,71 @@ async function startAdmin() {
 async function startEmployee(prof) {
   $('#emp-signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
   show('#screen-employee');
-  const body = $('#emp-body'); body.innerHTML = '';
+  const body = $('#emp-body'); body.innerHTML = '<p class="muted">Loading…</p>';
   const user = state.user || await API.auth.currentUser();
+  let mine = []; try { mine = await API.salons.mine(); } catch { /* ignore */ }
+  const salonId = mine[0]?.id || null;
+  body.innerHTML = '';
+
+  // Profile / contact / skills
   const f = {};
-  body.append(el('div', { class: 'card', style: 'max-width:520px;margin-bottom:18px' },
+  body.append(el('div', { class: 'card', style: 'max-width:560px;margin-bottom:18px' },
     el('h1', { style: 'margin-bottom:12px' }, 'My profile'),
     field('Name', f.name = el('input', { value: prof?.full_name || '' })),
     field('Phone', f.phone = el('input', { value: prof?.phone || '' })),
+    field('Skills', f.skills = el('input', { value: prof?.skills || '', placeholder: 'e.g. Balayage, Fades, Gel nails' })),
+    field('Bio', f.bio = el('textarea', { rows: 2 }, prof?.bio || '')),
     el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, `Email: ${user?.email || ''}`),
-    el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null }); toast('Saved'); } catch (e) { errToast(e); } } }, 'Save')));
+    el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null, skills: f.skills.value.trim() || null, bio: f.bio.value.trim() || null }); toast('Saved'); } catch (e) { errToast(e); } } }, 'Save')));
 
-  let mine = []; try { mine = await API.salons.mine(); } catch { /* ignore */ }
-  if (!mine.length) {
-    body.append(el('div', { class: 'banner' }, `You're not linked to a salon yet. Ask your salon's admin to add you using your email: ${user?.email || ''}`));
-  } else {
-    body.append(el('p', { class: 'muted', style: 'margin:0 0 8px' }, 'You work at: ' + mine.map((s) => s.name).join(', ')));
-  }
+  body.append(mine.length
+    ? el('p', { class: 'muted', style: 'margin:0 0 8px' }, 'You work at: ' + mine.map((s) => s.name).join(', '))
+    : el('div', { class: 'banner' }, `You're not linked to a salon yet. Ask your salon's admin to add you using your email: ${user?.email || ''}`));
 
-  body.append(el('h3', { style: 'margin:20px 0 10px' }, 'My upcoming appointments'));
+  // Appointments (upcoming + history)
   let appts = []; try { appts = await API.employee.myAppointments(); } catch (e) { errToast(e); }
-  if (!appts.length) { body.append(el('div', { class: 'card empty' }, 'No upcoming appointments assigned to you.')); return; }
-  const tb = el('tbody');
-  appts.forEach((a) => tb.append(el('tr', {},
-    el('td', {}, new Date(a.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
-    el('td', {}, a.service_name || '—'), el('td', {}, a.customer_name || '—'),
-    el('td', {}, a.salon_name || ''), el('td', {}, statusPill(a.status)))));
-  body.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
-    el('table', {}, el('thead', {}, el('tr', {}, ...['When', 'Service', 'Customer', 'Salon', 'Status'].map((h) => el('th', {}, h)))), tb)));
+  const now = new Date();
+  const upcoming = appts.filter((a) => new Date(a.starts_at) >= now && a.status !== 'cancelled');
+  const past = appts.filter((a) => new Date(a.starts_at) < now);
+  const apptTable = (rows, emptyMsg) => {
+    if (!rows.length) return el('div', { class: 'card empty' }, emptyMsg);
+    const tb = el('tbody');
+    rows.forEach((a) => tb.append(el('tr', {},
+      el('td', {}, new Date(a.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
+      el('td', {}, a.service_name || '—'), el('td', {}, a.customer_name || '—'),
+      el('td', {}, a.salon_name || ''), el('td', {}, statusPill(a.status)))));
+    return el('div', { class: 'card', style: 'padding:0;overflow:auto' },
+      el('table', {}, el('thead', {}, el('tr', {}, ...['When', 'Service', 'Customer', 'Salon', 'Status'].map((h) => el('th', {}, h)))), tb));
+  };
+  body.append(el('h3', { style: 'margin:20px 0 10px' }, 'Upcoming appointments'), apptTable(upcoming, 'No upcoming appointments assigned to you.'));
+  body.append(el('h3', { style: 'margin:24px 0 10px' }, 'Past appointments'), apptTable(past.slice(0, 50), 'No past appointments yet.'));
+
+  // Portfolio
+  body.append(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin:26px 0 10px;gap:12px;flex-wrap:wrap' },
+    el('h3', {}, 'My work / portfolio'),
+    (() => {
+      const fileIn = el('input', { type: 'file', accept: 'image/*', style: 'display:none' });
+      const btn = el('button', { class: 'btn', onclick: () => fileIn.click() }, '📷 Add photo');
+      fileIn.onchange = async () => {
+        const file = fileIn.files[0]; if (!file) return;
+        const caption = prompt('Add a caption (optional):') || null;
+        btn.disabled = true; btn.textContent = 'Uploading…';
+        try { await API.employee.uploadPhoto(file, { salonId, caption }); toast('Photo added'); renderPortfolio(); }
+        catch (e) { errToast(e); } finally { btn.disabled = false; btn.textContent = '📷 Add photo'; fileIn.value = ''; }
+      };
+      return el('span', {}, btn, fileIn);
+    })()));
+  const grid = el('div', { class: 'portfolio-grid' }); body.append(grid);
+  async function renderPortfolio() {
+    grid.innerHTML = '';
+    let photos = []; try { photos = await API.employee.myPortfolio(); } catch (e) { return errToast(e); }
+    if (!photos.length) { grid.append(el('div', { class: 'muted', style: 'grid-column:1/-1' }, 'No photos yet. Snap your finished looks to build your portfolio — they can appear on your salon\'s page.')); return; }
+    photos.forEach((p) => grid.append(el('div', { class: 'pf-tile' },
+      el('img', { src: p.url, alt: p.caption || '' }),
+      p.caption ? el('div', { class: 'pf-cap' }, p.caption) : '',
+      el('button', { class: 'pf-del', title: 'Delete', onclick: async () => { if (!confirm('Delete this photo?')) return; try { await API.employee.removePhoto(p); renderPortfolio(); } catch (e) { errToast(e); } } }, '✕'))));
+  }
+  renderPortfolio();
 }
 
 // ---- auth screen ----------------------------------------------------------
@@ -700,15 +738,23 @@ async function openHoursModal(s, refresh) {
 
 function openLinkEmployee(refresh) {
   const f = {};
+  const salonName = state.salon?.name || 'our salon';
+  const signupUrl = `${location.origin}/`;
+  const msg = `Join ${salonName} on Glowup Book! Create your employee account at ${signupUrl} (choose "I'm an employee"), then I'll add you to the team.`;
+  const isEmail = (v) => /@/.test(v || '');
   const wrap = el('div', {},
-    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Link an employee who already created a Glowup Book employee account. Enter the email they signed up with.'),
-    field('Employee email', f.email = el('input', { type: 'email' })),
+    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Already registered? Link them by the email or phone they used. Not yet? Send an invite to sign up.'),
+    field('Employee email or phone', f.id = el('input', { placeholder: 'name@email.com or (555) 123-4567' })),
     field('Display name (optional)', f.name = el('input', { placeholder: 'Shown on the calendar' })),
-    el('button', { class: 'btn block', onclick: save }, 'Link employee'));
-  const close = modal('Link an employee', wrap);
-  async function save() {
-    if (!f.email.value.trim()) return toast('Enter their email', true);
-    try { await API.staff.linkEmployee(state.salon.id, f.email.value.trim(), f.name.value.trim()); close(); refresh(); toast('Employee linked'); }
+    el('button', { class: 'btn block', style: 'margin-bottom:12px', onclick: link }, 'Link existing account'),
+    el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:6px' }, 'Or invite them to register:'),
+    el('div', { class: 'row' },
+      el('button', { class: 'btn ghost', onclick: () => { const to = isEmail(f.id.value) ? f.id.value.trim() : ''; window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent('Join ' + salonName + ' on Glowup Book')}&body=${encodeURIComponent(msg)}`; } }, '✉ Invite by email'),
+      el('button', { class: 'btn ghost', onclick: () => { const to = !isEmail(f.id.value) ? (f.id.value || '').replace(/[^0-9+]/g, '') : ''; window.location.href = `sms:${to}?&body=${encodeURIComponent(msg)}`; } }, '💬 Invite by text')));
+  const close = modal('Add an employee', wrap);
+  async function link() {
+    if (!f.id.value.trim()) return toast('Enter their email or phone', true);
+    try { await API.staff.linkEmployee(state.salon.id, f.id.value.trim(), f.name.value.trim()); close(); refresh(); toast('Employee linked'); }
     catch (e) { errToast(e); }
   }
 }
@@ -1130,6 +1176,15 @@ async function startStorefront(sl) {
     btn.onclick = async () => { try { faved ? await API.customer.removeFavorite(salon.id) : await API.customer.addFavorite(salon.id); faved = !faved; paint(); toast(faved ? 'Added to favorites' : 'Removed from favorites'); } catch (e) { errToast(e); } };
     meta.append(btn);
   })();
+
+  // Portfolio gallery (recent work) — host sits above the booking flow.
+  const galleryHost = el('div'); root.append(galleryHost);
+  API.storefront.portfolio(salon.id).then((photos) => {
+    if (!photos.length) return;
+    const gal = el('div', { class: 'store-gallery' });
+    photos.forEach((p) => gal.append(el('div', { class: 'pf-tile' }, el('img', { src: p.url, alt: p.caption || '' }), p.caption ? el('div', { class: 'pf-cap' }, p.caption) : '')));
+    galleryHost.append(el('div', { class: 'step' }, el('h3', {}, 'Recent work'), gal));
+  }).catch(() => {});
 
   const flow = el('div'); root.append(flow);
 
