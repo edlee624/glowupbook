@@ -183,7 +183,7 @@ const hours = {
 const customers = {
   async list(salonId, { search } = {}) {
     let q = client().from('customers').select('*').eq('salon_id', salonId).order('name');
-    if (search) q = q.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+    if (search) q = q.or(`name.ilike.*${search}*,email.ilike.*${search}*,phone.ilike.*${search}*`);
     return unwrap(await q) || [];
   },
   async create(salonId, c) {
@@ -227,16 +227,17 @@ const appointments = {
 
 // ---- Public storefront (anonymous) ---------------------------------------
 const storefront = {
-  // Public directory: published salons + unclaimed seed listings.
-  // Falls back to published-only if the `claimed` column isn't migrated yet.
+  // Public directory. RLS already limits anonymous reads to published + unclaimed
+  // salons, so we don't filter on claimed here (which also lets us use a single
+  // .or() for search without two .or() clauses colliding). Published (bookable)
+  // salons sort first; capped since the directory can hold thousands.
   async directory({ search, type } = {}) {
     const build = (withClaimed) => {
       let q = client().from('salons')
-        .select('id,name,slug,business_type,about,city,address,logo_url,cover_url,is_published' + (withClaimed ? ',claimed' : ''));
-      q = withClaimed ? q.or('is_published.eq.true,claimed.eq.false') : q.eq('is_published', true);
-      q = q.order('name');
+        .select('id,name,slug,business_type,about,city,address,logo_url,cover_url,is_published' + (withClaimed ? ',claimed' : ''))
+        .order('is_published', { ascending: false }).order('name').limit(60);
       if (type) q = q.eq('business_type', type);
-      if (search) q = q.or(`name.ilike.%${search}%,city.ilike.%${search}%,about.ilike.%${search}%`);
+      if (search) q = q.or(`name.ilike.*${search}*,city.ilike.*${search}*`);
       return q;
     };
     let { data, error } = await build(true);

@@ -613,6 +613,10 @@ async function startDirectory() {
       return;
     }
     salons.forEach((s) => grid.append(salonCard(s)));
+    if (salons.length >= 60) {
+      grid.append(el('div', { class: 'muted', style: 'grid-column:1/-1;text-align:center;padding:18px;font-size:14px' },
+        'Showing the first 60 salons — search by name or city, or pick a type, to narrow it down.'));
+    }
   }
   q.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   type.onchange = load;
