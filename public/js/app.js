@@ -39,6 +39,20 @@ function modal(title, bodyNode, { wide } = {}) {
   root.innerHTML = ''; root.append(bg);
   return close;
 }
+// Shows a "check your email to confirm" banner with a Resend link, used after
+// signup (when email confirmation is on) and on a "not confirmed" login error.
+function showEmailConfirmNotice(container, email, opts = {}) {
+  if (!container) return;
+  container.querySelector('#email-confirm-note')?.remove();
+  container.append(el('div', { id: 'email-confirm-note', class: 'banner', style: 'margin-top:12px' },
+    `${opts.prefix || 'Almost there!'} We sent a confirmation link to ${email}. Open it to activate your account, then log in. `,
+    el('a', { href: '#', onclick: async (e) => {
+      e.preventDefault();
+      try { await API.auth.resendConfirmation(email); toast('Confirmation email resent'); }
+      catch (err) { errToast(err); }
+    } }, 'Resend email')));
+}
+
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const todayISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -106,6 +120,16 @@ function startDashboardApp() {
 
 async function afterLogin() {
   try {
+    // Pending "claim this salon" intent from a storefront listing.
+    let claimed = false;
+    const claimSlug = sessionStorage.getItem('claim_slug');
+    if (claimSlug) {
+      sessionStorage.removeItem('claim_slug');
+      try {
+        const s = await API.storefront.salon(claimSlug);
+        if (s && !s.claimed) { await API.salons.claim(s.id); claimed = true; toast('Salon claimed! Finish setting it up below.'); }
+      } catch (e) { errToast(e); }
+    }
     const mine = await API.salons.mine();
     if (!mine.length) {
       // A customer account has no salon — send them to the public directory.
@@ -113,10 +137,10 @@ async function afterLogin() {
       if (prof?.role === 'customer') { location.href = '/'; return; }
       wireOnboarding(); show('#screen-onboarding'); return;
     }
-    state.salon = mine[0];
+    state.salon = claimed ? (mine.find((s) => s.slug === claimSlug) || mine[0]) : mine[0];
     wireAppShell();
     show('#screen-app');
-    navigate('calendar');
+    navigate(claimed ? 'settings' : 'calendar');
   } catch (e) { errToast(e); }
 }
 
@@ -140,12 +164,15 @@ function wireAuthScreen() {
     if (!email || !password) return toast('Enter email and password', true);
     try {
       if (mode === 'signup') {
-        await API.auth.signUp({ email, password, fullName: $('#au-name').value.trim() });
-        toast('Account created! Check your email if confirmation is on.');
+        const res = await API.auth.signUp({ email, password, fullName: $('#au-name').value.trim() });
+        if (!res?.session) { setMode('login'); showEmailConfirmNotice($('.auth-card'), email); toast('Check your email to confirm.'); return; }
       } else {
         await API.auth.signIn({ email, password });
       }
-    } catch (err) { errToast(err); }
+    } catch (err) {
+      if (/confirm/i.test(err?.message || '')) { showEmailConfirmNotice($('.auth-card'), email, { prefix: 'Please confirm your email first.' }); toast('Email not confirmed yet', true); return; }
+      errToast(err);
+    }
   };
   $('#forgot').onclick = async (e) => {
     e.preventDefault();
@@ -644,14 +671,17 @@ function openCustomerAuth(onDone) {
     if (!email || !password) return toast('Enter email and password', true);
     try {
       if (mode === 'signup') {
-        await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role: 'customer' });
-        toast('Account created! Check your email if confirmation is on.');
+        const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role: 'customer' });
+        if (!res?.session) { showEmailConfirmNotice(wrap, email); toast('Check your email to confirm.'); return; }
       } else {
         await API.auth.signIn({ email, password });
         toast('Welcome back!');
       }
       close(); if (onDone) onDone();
-    } catch (e) { errToast(e); }
+    } catch (e) {
+      if (/confirm/i.test(e?.message || '')) { showEmailConfirmNotice(wrap, email, { prefix: 'Please confirm your email first.' }); return; }
+      errToast(e);
+    }
   }
 }
 
@@ -682,12 +712,17 @@ async function openMyBookings() {
 }
 
 function salonCard(s) {
+  const unclaimed = !s.is_published && s.claimed === false;
+  const badge = unclaimed
+    ? el('span', { class: 'type-pill', style: 'background:#FFF4E0;color:#8a5a00' }, 'Unclaimed')
+    : (s.is_published ? el('span', { class: 'type-pill', style: 'background:#E2F6F2;color:var(--mint)' }, 'Book online') : '');
   return el('a', { class: 'salon-card', href: `/${s.slug}` },
     el('div', { class: 'cover', style: s.cover_url ? `background-image:url('${s.cover_url}')` : '' }),
     el('div', { class: 'body' },
       el('h3', {}, s.name),
-      el('div', { class: 'meta' }, [s.city, s.address].filter(Boolean).join(' · ') || 'Book online'),
-      el('span', { class: 'type-pill' }, TYPE_LABELS[s.business_type] || 'Salon'),
+      el('div', { class: 'meta' }, [s.city, s.address].filter(Boolean).join(' · ') || ''),
+      el('div', { style: 'margin-top:10px;display:flex;gap:6px;flex-wrap:wrap' },
+        el('span', { class: 'type-pill' }, TYPE_LABELS[s.business_type] || 'Salon'), badge),
     ));
 }
 
@@ -708,6 +743,19 @@ async function startStorefront(sl) {
     salon.about ? el('p', { style: 'opacity:.92;margin:8px 0 0' }, salon.about) : '',
     el('p', { style: 'opacity:.85;margin:10px 0 0;font-size:14px' }, [salon.address, salon.phone].filter(Boolean).join(' · ')));
   root.append(hero);
+
+  // Unclaimed seed listing — no online booking set up yet. Offer to claim it.
+  if (!salon.is_published) {
+    root.append(el('div', { class: 'card', style: 'margin-top:18px;text-align:center' },
+      el('h3', { style: 'margin-bottom:8px' }, 'Not bookable online yet'),
+      el('p', { class: 'muted' }, 'This salon is listed in our directory but hasn\'t set up online booking.'),
+      el('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { sessionStorage.setItem('claim_slug', sl); location.href = '/app'; } },
+        'Is this your business? Claim this page'),
+      el('p', { class: 'muted', style: 'font-size:13px;margin-top:14px' },
+        salon.phone ? `In the meantime, you can call ${salon.phone}.` : 'Browse other salons in the meantime.')));
+    return;
+  }
+
   const flow = el('div'); root.append(flow);
 
   let services = [];

@@ -55,6 +55,11 @@ const auth = {
     const { error } = await client().auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
     if (error) throw error;
   },
+  // Re-send the signup confirmation email.
+  async resendConfirmation(email) {
+    const { error } = await client().auth.resend({ type: 'signup', email });
+    if (error) throw error;
+  },
   async currentUser() {
     if (!supabase) return null;
     const { data } = await supabase.auth.getUser();
@@ -100,6 +105,10 @@ const salons = {
   async slugAvailable(slug) {
     const data = unwrap(await client().from('salons').select('id').eq('slug', slug).limit(1));
     return (data || []).length === 0;
+  },
+  // Claim an unclaimed seed listing (caller becomes the owner).
+  async claim(salonId) {
+    return unwrap(await client().rpc('claim_salon', { p_salon: salonId }));
   },
 };
 
@@ -218,18 +227,32 @@ const appointments = {
 
 // ---- Public storefront (anonymous) ---------------------------------------
 const storefront = {
-  // Public directory of published salons (RLS only returns is_published rows).
+  // Public directory: published salons + unclaimed seed listings.
+  // Falls back to published-only if the `claimed` column isn't migrated yet.
   async directory({ search, type } = {}) {
-    let q = client().from('salons')
-      .select('id,name,slug,business_type,about,city,address,logo_url,cover_url')
-      .eq('is_published', true).order('name');
-    if (type) q = q.eq('business_type', type);
-    if (search) q = q.or(`name.ilike.%${search}%,city.ilike.%${search}%,about.ilike.%${search}%`);
-    return unwrap(await q) || [];
+    const build = (withClaimed) => {
+      let q = client().from('salons')
+        .select('id,name,slug,business_type,about,city,address,logo_url,cover_url,is_published' + (withClaimed ? ',claimed' : ''));
+      q = withClaimed ? q.or('is_published.eq.true,claimed.eq.false') : q.eq('is_published', true);
+      q = q.order('name');
+      if (type) q = q.eq('business_type', type);
+      if (search) q = q.or(`name.ilike.%${search}%,city.ilike.%${search}%,about.ilike.%${search}%`);
+      return q;
+    };
+    let { data, error } = await build(true);
+    if (error && /claimed/i.test(error.message || '')) ({ data, error } = await build(false));
+    if (error) throw error;
+    return data || [];
   },
-  // Public salon profile by slug (only returns rows for published salons via RLS).
+  // Public salon by slug — published salons AND unclaimed listings (so the
+  // storefront can show a "claim this page" view for unclaimed ones).
   async salon(slug) {
-    const data = unwrap(await client().from('salons').select('*').eq('slug', slug).eq('is_published', true).limit(1));
+    let { data, error } = await client().from('salons').select('*')
+      .eq('slug', slug).or('is_published.eq.true,claimed.eq.false').limit(1);
+    if (error && /claimed/i.test(error.message || '')) {
+      ({ data, error } = await client().from('salons').select('*').eq('slug', slug).eq('is_published', true).limit(1));
+    }
+    if (error) throw error;
     return (data || [])[0] || null;
   },
   async services(salonId) {
