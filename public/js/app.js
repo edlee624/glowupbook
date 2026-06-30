@@ -287,48 +287,110 @@ function navigate(page) {
   (PAGES[page] || PAGES.calendar)(root);
 }
 
-// ---- CALENDAR (day view) --------------------------------------------------
+// ---- CALENDAR (day / week / month) ----------------------------------------
+const CAL_H0 = 7, CAL_H1 = 21;   // hour grid range (7am–9pm)
+const startOfDay = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const startOfWeek = (d) => addDays(startOfDay(d), -startOfDay(d).getDay());   // Sunday
+const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+
 PAGES.calendar = async (root) => {
-  let day = new Date();
+  const st = { view: 'week', anchor: new Date() };
   const head = el('div', { class: 'page-head' });
-  const grid = el('div', { class: 'day-grid' });
-  root.append(head, grid);
+  const body = el('div');
+  root.append(head, body);
+
+  function rangeFor() {
+    if (st.view === 'day') return [startOfDay(st.anchor), addDays(startOfDay(st.anchor), 1)];
+    if (st.view === 'week') { const s = startOfWeek(st.anchor); return [s, addDays(s, 7)]; }
+    const first = new Date(st.anchor.getFullYear(), st.anchor.getMonth(), 1);
+    const gridStart = startOfWeek(first);
+    return [gridStart, addDays(gridStart, 42)];
+  }
+  function titleFor() {
+    if (st.view === 'day') return st.anchor.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+    if (st.view === 'month') return st.anchor.toLocaleDateString([], { month: 'long', year: 'numeric' });
+    const s = startOfWeek(st.anchor), e = addDays(s, 6);
+    return `${s.toLocaleDateString([], { month: 'short', day: 'numeric' })} – ${e.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+  }
+  function shift(dir) {
+    if (st.view === 'day') st.anchor = addDays(st.anchor, dir);
+    else if (st.view === 'week') st.anchor = addDays(st.anchor, dir * 7);
+    else st.anchor = new Date(st.anchor.getFullYear(), st.anchor.getMonth() + dir, 1);
+    render();
+  }
+  const setView = (v) => { st.view = v; render(); };
 
   async function render() {
     head.innerHTML = '';
-    const label = el('h1', {}, day.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' }));
-    const controls = el('div', { class: 'cal-controls' },
-      el('button', { class: 'btn ghost sm', onclick: () => { day.setDate(day.getDate() - 1); render(); } }, '‹'),
-      el('button', { class: 'btn ghost sm', onclick: () => { day = new Date(); render(); } }, 'Today'),
-      el('button', { class: 'btn ghost sm', onclick: () => { day.setDate(day.getDate() + 1); render(); } }, '›'),
-      el('button', { class: 'btn', onclick: () => openApptModal(day, render) }, '+ New appointment'),
-    );
-    head.append(label, controls);
+    const toggle = el('div', { class: 'viewtoggle' },
+      ...['day', 'week', 'month'].map((v) => el('button', { class: v === st.view ? 'on' : '', onclick: () => setView(v) }, v[0].toUpperCase() + v.slice(1))));
+    head.append(
+      el('h1', {}, titleFor()),
+      el('div', { class: 'cal-controls' }, toggle,
+        el('button', { class: 'btn ghost sm', onclick: () => shift(-1) }, '‹'),
+        el('button', { class: 'btn ghost sm', onclick: () => { st.anchor = new Date(); render(); } }, 'Today'),
+        el('button', { class: 'btn ghost sm', onclick: () => shift(1) }, '›'),
+        el('button', { class: 'btn', onclick: () => openApptModal(st.anchor, render) }, '+ New')));
 
-    const from = new Date(day); from.setHours(0, 0, 0, 0);
-    const to = new Date(day); to.setHours(23, 59, 59, 999);
+    const [from, to] = rangeFor();
     let appts = [];
-    try { appts = await API.appointments.range(state.salon.id, from.toISOString(), to.toISOString()); }
-    catch (e) { errToast(e); }
+    try { appts = await API.appointments.range(state.salon.id, from.toISOString(), to.toISOString()); } catch (e) { errToast(e); }
 
-    grid.innerHTML = '';
-    for (let h = 7; h <= 20; h++) {
-      const slotAppts = appts.filter((a) => new Date(a.starts_at).getHours() === h);
-      grid.append(el('div', { class: 'hour-row' },
-        el('div', { class: 'hour-label' }, `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`),
-        el('div', {}, slotAppts.map((a) => apptChip(a, render))),
-      ));
-    }
-    if (!appts.length) grid.append(el('div', { class: 'empty' }, 'No appointments this day.'));
+    body.innerHTML = '';
+    if (st.view === 'month') body.append(renderMonth(from, appts));
+    else body.append(renderTimeGrid(st.view === 'week' ? 7 : 1, from, appts));
   }
+
+  function renderTimeGrid(days, from, appts) {
+    const cols = `56px repeat(${days}, 1fr)`;
+    const wrap = el('div', { class: 'cal-grid' });
+    if (days > 1) {
+      const hd = el('div', { class: 'cal-dayhead', style: `grid-template-columns:${cols}` }, el('div', {}, ''));
+      for (let i = 0; i < days; i++) { const d = addDays(from, i); hd.append(el('div', { style: sameDay(d, new Date()) ? 'color:var(--plum)' : '' }, d.toLocaleDateString([], { weekday: 'short', day: 'numeric' }))); }
+      wrap.append(hd);
+    }
+    for (let h = CAL_H0; h < CAL_H1; h++) {
+      const row = el('div', { class: 'cal-row', style: `grid-template-columns:${cols}` },
+        el('div', { class: 'cal-timecol' }, `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`));
+      for (let i = 0; i < days; i++) {
+        const d = addDays(from, i);
+        const cell = el('div', { class: 'cal-cell' });
+        appts.filter((a) => { const s = new Date(a.starts_at); return sameDay(s, d) && s.getHours() === h; })
+          .forEach((a) => cell.append(calChip(a, render, days > 1)));
+        row.append(cell);
+      }
+      wrap.append(row);
+    }
+    return wrap;
+  }
+
+  function renderMonth(gridStart, appts) {
+    const wrap = el('div', { class: 'cal-month' });
+    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d) => wrap.append(el('div', { class: 'cal-mcell', style: 'min-height:auto;background:var(--paper-dim);font-weight:600;font-size:12px;text-align:center;cursor:default' }, d)));
+    for (let i = 0; i < 42; i++) {
+      const d = addDays(gridStart, i);
+      const dayAppts = appts.filter((a) => sameDay(new Date(a.starts_at), d)).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      const other = d.getMonth() !== st.anchor.getMonth();
+      const cell = el('div', { class: 'cal-mcell' + (other ? ' other' : '') + (sameDay(d, new Date()) ? ' today' : ''), onclick: () => { st.view = 'day'; st.anchor = d; render(); } },
+        el('div', { class: 'dnum' }, String(d.getDate())));
+      dayAppts.slice(0, 3).forEach((a) => cell.append(el('div', { class: 'cal-appt' + (a.status === 'cancelled' ? ' cancelled' : ''), onclick: (e) => { e.stopPropagation(); openApptModal(null, render, a); } },
+        `${fmtTime(a.starts_at, state.salon.timezone)} ${a.customer?.name || 'Walk-in'}`)));
+      if (dayAppts.length > 3) cell.append(el('div', { class: 'muted', style: 'font-size:11px' }, `+${dayAppts.length - 3} more`));
+      wrap.append(cell);
+    }
+    return wrap;
+  }
+
   render();
 };
 
-function apptChip(a, refresh) {
-  return el('div', { class: 'appt' + (a.status === 'cancelled' ? ' cancelled' : ''), onclick: () => openApptModal(null, refresh, a) },
-    el('div', { class: 'who' }, `${fmtTime(a.starts_at, state.salon.timezone)} · ${a.customer?.name || 'Walk-in'}`),
-    el('div', {}, `${a.service?.name || ''}${a.staff ? ' — ' + a.staff.name : ''}`),
-  );
+// Appointment chip for the time grid (compact in week view).
+function calChip(a, refresh, compact) {
+  const node = el('div', { class: 'cal-appt' + (a.status === 'cancelled' ? ' cancelled' : ''), onclick: () => openApptModal(null, refresh, a) });
+  if (compact) node.textContent = `${fmtTime(a.starts_at, state.salon.timezone)} ${a.customer?.name || 'Walk-in'}`;
+  else { node.append(el('div', { style: 'font-weight:700' }, `${fmtTime(a.starts_at, state.salon.timezone)} · ${a.customer?.name || 'Walk-in'}`), el('div', {}, `${a.service?.name || ''}${a.staff ? ' — ' + a.staff.name : ''}`)); }
+  return node;
 }
 
 // ---- APPOINTMENTS (list) --------------------------------------------------
