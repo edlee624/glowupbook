@@ -352,6 +352,14 @@ const storefront = {
       .eq('salon_id', salonId).eq('is_public', true).order('created_at', { ascending: false }).limit(limit)) || [];
     return rows.map((r) => ({ ...r, url: client().storage.from('portfolio').getPublicUrl(r.path).data.publicUrl }));
   },
+  // Recent public photos across ALL salons — feeds the homepage gallery.
+  async recentPortfolio(limit = 18) {
+    const rows = unwrap(await client().from('portfolio')
+      .select('path,caption,salon:salons(slug,name,business_type)')
+      .eq('is_public', true).not('salon_id', 'is', null)
+      .order('created_at', { ascending: false }).limit(limit)) || [];
+    return rows.filter((r) => r.salon).map((r) => ({ ...r, url: client().storage.from('portfolio').getPublicUrl(r.path).data.publicUrl }));
+  },
 };
 
 // ---- Logged-in customer (their own bookings across all salons) ------------

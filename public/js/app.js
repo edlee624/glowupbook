@@ -901,7 +901,45 @@ async function startDirectory() {
 
   q.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   type.onchange = load;
-  load();
+  await load();
+  renderGallery(lastResults);
+}
+
+// Themed inspiration images (free Unsplash) used when real portfolio photos
+// aren't available yet. Tiles always link to a real salon page.
+const SHOWCASE = {
+  nails: ['photo-1632345031435-8727f6897d53', 'photo-1604654894610-df63bc536371', 'photo-1610992015762-45dca7fa3a85'],
+  hair: ['photo-1634449571010-02389ed0f9b0', 'photo-1580618672591-eb180b1a973f', 'photo-1595475884562-073c30d45670'],
+  barber: ['photo-1503951914875-452162b0f3f1', 'photo-1605497788044-5a32c7078486', 'photo-1585747860715-2ba37e788b70'],
+  beauty: ['photo-1570172619644-dfd03ed5d881', 'photo-1616394584738-fc6e612e71b9', 'photo-1643684391140-c5056cfd3436'],
+};
+const showImg = (id) => `https://images.unsplash.com/${id}?w=600&h=600&fit=crop&auto=format&q=70`;
+
+async function renderGallery(salonsForLink) {
+  const band = $('#dir-carousel-band'), strip = $('#dir-carousel');
+  if (!band || !strip || !API.enabled) return;
+  strip.innerHTML = '';
+  const tiles = [];
+  // Real employee/portfolio photos first.
+  try {
+    const photos = await API.storefront.recentPortfolio(18);
+    photos.forEach((p) => { if (p.salon?.slug) tiles.push({ img: p.url, slug: p.salon.slug, label: p.salon.name, sub: p.caption || 'Recent work' }); });
+  } catch { /* */ }
+  // Pad with themed inspiration tiles linked to real salons.
+  if (tiles.length < 12 && salonsForLink?.length) {
+    let i = 0;
+    for (const s of salonsForLink) {
+      if (tiles.length >= 12) break;
+      const imgs = SHOWCASE[s.business_type] || SHOWCASE.hair;
+      tiles.push({ img: showImg(imgs[i % imgs.length]), slug: s.slug, label: s.name, sub: TYPE_LABELS[s.business_type] || 'Salon' });
+      i++;
+    }
+  }
+  if (!tiles.length) { band.classList.add('hidden'); return; }
+  band.classList.remove('hidden');
+  tiles.forEach((t) => strip.append(el('a', { class: 'show-tile', href: `/${t.slug}` },
+    el('img', { src: t.img, alt: t.label, loading: 'lazy' }),
+    el('div', { class: 'cap' }, t.label, t.sub ? el('small', {}, t.sub) : ''))));
 }
 
 // Lazy-load Leaflet (map library) only when the map view is first opened.
