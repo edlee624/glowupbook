@@ -261,6 +261,12 @@ const appointments = {
   async setStatus(id, status) {
     return unwrap(await client().from('appointments').update({ status }).eq('id', id).select().single());
   },
+  // Flag an appointment as awaiting customer confirmation; returns the row
+  // (incl. confirm_token) so the dashboard can build an email/SMS confirm link.
+  async requestConfirmation(id) {
+    return unwrap(await client().from('appointments')
+      .update({ confirmation_requested_at: new Date().toISOString() }).eq('id', id).select().single());
+  },
   async remove(id) {
     const { error } = await client().from('appointments').delete().eq('id', id);
     if (error) throw error;
@@ -335,6 +341,11 @@ const storefront = {
     const data = unwrap(await client().rpc('salon_rating', { p_salon: salonId }));
     return (data || [])[0] || { avg_rating: null, review_count: 0 };
   },
+  // Confirm an appointment via its emailed/texted token (no login needed).
+  async confirm(token) {
+    const data = unwrap(await client().rpc('confirm_appointment', { p_token: token }));
+    return (data || [])[0] || null;
+  },
   // Public portfolio photos for a salon (for the storefront gallery).
   async portfolio(salonId, limit = 12) {
     const rows = unwrap(await client().from('portfolio').select('id,path,caption')
@@ -350,6 +361,10 @@ const customer = {
   },
   async cancel(apptId) {
     const { error } = await client().rpc('cancel_my_appointment', { p_appt: apptId });
+    if (error) throw error;
+  },
+  async confirm(apptId) {
+    const { error } = await client().rpc('confirm_my_appointment', { p_appt: apptId });
     if (error) throw error;
   },
   // Favorites

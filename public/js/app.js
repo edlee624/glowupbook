@@ -72,7 +72,7 @@ const RESERVED = new Set([
   'dashboard', 'admin', 'api', 'book', 'booking', 'about', 'pricing', 'terms',
   'privacy', 'legal', 'help', 'support', 'contact', 'blog', 'settings',
   'account', 'profile', 'assets', 'static', 'js', 'css', 'img', 'images',
-  'fonts', 'config', 'favicon', 'robots', 'sitemap', 'index', 'www', 'home',
+  'fonts', 'config', 'favicon', 'robots', 'sitemap', 'index', 'www', 'home', 'confirm',
 ]);
 
 // Returns the salon slug if the current URL is a storefront, else null.
@@ -88,11 +88,30 @@ function storefrontSlug() {
 const APP_PATHS = new Set(['app', 'login', 'log-in', 'signin', 'sign-in', 'dashboard', 'admin', 'account']);
 
 async function boot() {
+  const cm = location.pathname.match(/^\/confirm\/([0-9a-fA-F-]{8,})/);
+  if (cm) return startConfirm(cm[1]);
   const sl = storefrontSlug();
   if (sl) return startStorefront(sl);
   const p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
   if (APP_PATHS.has(p)) return startDashboardApp();
   startDirectory();   // root (and any other public path) → directory
+}
+
+// Public appointment-confirmation page (from an emailed/texted link).
+async function startConfirm(token) {
+  show('#screen-store');
+  const root = $('#store-body'); root.innerHTML = '<p class="muted">Confirming your appointment…</p>';
+  if (!API.enabled) { root.innerHTML = ''; return root.append(el('div', { class: 'banner' }, 'Not connected to a backend.')); }
+  let info = null;
+  try { info = await API.storefront.confirm(token); }
+  catch (e) { root.innerHTML = ''; return root.append(el('div', { class: 'card empty' }, 'Could not confirm: ' + e.message)); }
+  root.innerHTML = '';
+  if (!info) { root.append(el('div', { class: 'card empty' }, 'This confirmation link is invalid or expired.')); return; }
+  root.append(el('div', { class: 'card', style: 'text-align:center;padding:40px' },
+    el('div', { style: 'font-size:48px' }, '✓'),
+    el('h2', { style: 'margin:10px 0' }, "You're confirmed!"),
+    el('p', { class: 'muted' }, `${info.service_name || 'Appointment'} at ${info.salon_name} on ${new Date(info.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.`),
+    el('a', { class: 'btn', style: 'margin-top:10px', href: '/' }, 'Browse salons')));
 }
 
 // ===========================================================================
@@ -523,14 +542,37 @@ async function openApptModal(day, refresh, existing) {
       el('option', { value: s, ...(existing.status === s ? { selected: true } : {}) }, s.replace('_', ' '))))));
   wrap.append(field('Notes', f.notes = el('textarea', { rows: 2 }, existing?.notes || '')));
 
+  if (existing) {
+    const cs = existing.status === 'confirmed' ? '✓ Confirmed by the customer'
+      : existing.confirmation_requested_at ? '⏳ Awaiting customer confirmation' : null;
+    if (cs) wrap.append(el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, cs));
+  }
+
   const actions = el('div', { class: 'row', style: 'margin-top:8px' });
   if (existing) actions.append(el('button', { class: 'btn danger', onclick: async () => {
     if (!confirm('Delete this appointment?')) return;
     try { await API.appointments.remove(existing.id); close(); refresh(); toast('Deleted'); } catch (e) { errToast(e); }
   } }, 'Delete'));
+  if (existing && !['confirmed', 'cancelled', 'completed'].includes(existing.status)) {
+    actions.append(el('button', { class: 'btn ghost', onclick: requestConfirm }, 'Request confirmation'));
+  }
   actions.append(el('button', { class: 'btn', onclick: save }, existing ? 'Save changes' : 'Book appointment'));
   wrap.append(actions);
   const close = modal(existing ? 'Edit appointment' : 'New appointment', wrap);
+
+  async function requestConfirm() {
+    try {
+      const row = await API.appointments.requestConfirmation(existing.id);
+      const link = `${location.origin}/confirm/${row.confirm_token}`;
+      const when = new Date(existing.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+      const cust = existing.customer || {};
+      const msg = `Hi ${cust.name || ''}, please confirm your appointment at ${state.salon.name} on ${when}. Tap to confirm: ${link}`;
+      if (cust.email) window.location.href = `mailto:${encodeURIComponent(cust.email)}?subject=${encodeURIComponent('Please confirm your appointment')}&body=${encodeURIComponent(msg)}`;
+      else if (cust.phone) window.location.href = `sms:${(cust.phone || '').replace(/[^0-9+]/g, '')}?&body=${encodeURIComponent(msg)}`;
+      else { try { await navigator.clipboard.writeText(link); } catch { /* */ } toast('No email/phone on file — confirm link copied'); }
+      close(); refresh();
+    } catch (e) { errToast(e); }
+  }
 
   async function save() {
     try {
@@ -1001,6 +1043,7 @@ async function openCustomerProfile() {
       const past = new Date(b.starts_at) < new Date();
       const upcoming = !past && b.status !== 'cancelled';
       const actions = el('div', { style: 'display:flex;gap:6px;align-items:center' });
+      if (upcoming && b.status === 'booked') actions.append(el('button', { class: 'btn sm', onclick: async () => { try { await API.customer.confirm(b.id); select('Bookings'); toast('Confirmed — see you there!'); } catch (e) { errToast(e); } } }, 'Confirm'));
       if (upcoming) actions.append(el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm('Cancel this booking?')) return; try { await API.customer.cancel(b.id); select('Bookings'); toast('Cancelled'); } catch (e) { errToast(e); } } }, 'Cancel'));
       else if (b.status !== 'cancelled') {
         actions.append(rated[b.id]
@@ -1129,6 +1172,26 @@ function socialLinks(salon) {
   const row = el('div', { style: 'margin-top:12px;display:flex;gap:14px;flex-wrap:wrap' });
   links.forEach((a) => row.append(a));
   return row;
+}
+
+// Warn a logged-in customer when a just-booked appointment is back-to-back
+// (within 30 min) of another of their bookings — leave travel time.
+async function warnIfBackToBack(startISO, durMin) {
+  try {
+    const u = await API.auth.currentUser(); if (!u) return;
+    const list = await API.customer.myBookings();
+    const newStart = new Date(startISO).getTime();
+    const newEnd = newStart + (durMin || 0) * 60000;
+    const GAP = 30 * 60000;
+    const adj = list.find((b) => {
+      if (b.status === 'cancelled') return false;
+      const s = new Date(b.starts_at).getTime(), e = new Date(b.ends_at).getTime();
+      if (Math.abs(s - newStart) < 60000) return false;   // the booking we just made
+      const gap = Math.max(s - newEnd, newStart - e);      // ≥0 means no overlap
+      return gap >= 0 && gap <= GAP;
+    });
+    if (adj) toast('Heads up: this is back-to-back with another of your bookings — leave travel time.');
+  } catch { /* non-blocking */ }
 }
 
 // ===========================================================================
@@ -1279,6 +1342,7 @@ async function startStorefront(sl) {
           start: sf.slot.slot_start, name: f.name.value.trim(), email: f.email.value.trim(),
           phone: f.phone.value.trim(), notes: f.notes.value.trim(),
         });
+        await warnIfBackToBack(sf.slot.slot_start, sf.service.duration_min);
         renderDone();
       } catch (e) { errToast(e); }
     }
