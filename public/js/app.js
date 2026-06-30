@@ -131,8 +131,9 @@ async function afterLogin() {
       } catch (e) { errToast(e); }
     }
     const prof = await API.auth.profile();
-    // Platform super-admins land in the admin console.
+    // Platform super-admins → console; employees → their profile.
     if (!claimed && prof?.role === 'admin') { startAdmin(); return; }
+    if (!claimed && prof?.role === 'staff') { startEmployee(prof); return; }
     const mine = await API.salons.mine();
     if (!mine.length) {
       // A customer account has no salon — send them to the public directory.
@@ -194,6 +195,39 @@ async function startAdmin() {
   }
   search.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   load();
+}
+
+// ---- employee profile -----------------------------------------------------
+async function startEmployee(prof) {
+  $('#emp-signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
+  show('#screen-employee');
+  const body = $('#emp-body'); body.innerHTML = '';
+  const user = state.user || await API.auth.currentUser();
+  const f = {};
+  body.append(el('div', { class: 'card', style: 'max-width:520px;margin-bottom:18px' },
+    el('h1', { style: 'margin-bottom:12px' }, 'My profile'),
+    field('Name', f.name = el('input', { value: prof?.full_name || '' })),
+    field('Phone', f.phone = el('input', { value: prof?.phone || '' })),
+    el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, `Email: ${user?.email || ''}`),
+    el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null }); toast('Saved'); } catch (e) { errToast(e); } } }, 'Save')));
+
+  let mine = []; try { mine = await API.salons.mine(); } catch { /* ignore */ }
+  if (!mine.length) {
+    body.append(el('div', { class: 'banner' }, `You're not linked to a salon yet. Ask your salon's admin to add you using your email: ${user?.email || ''}`));
+  } else {
+    body.append(el('p', { class: 'muted', style: 'margin:0 0 8px' }, 'You work at: ' + mine.map((s) => s.name).join(', ')));
+  }
+
+  body.append(el('h3', { style: 'margin:20px 0 10px' }, 'My upcoming appointments'));
+  let appts = []; try { appts = await API.employee.myAppointments(); } catch (e) { errToast(e); }
+  if (!appts.length) { body.append(el('div', { class: 'card empty' }, 'No upcoming appointments assigned to you.')); return; }
+  const tb = el('tbody');
+  appts.forEach((a) => tb.append(el('tr', {},
+    el('td', {}, new Date(a.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
+    el('td', {}, a.service_name || '—'), el('td', {}, a.customer_name || '—'),
+    el('td', {}, a.salon_name || ''), el('td', {}, statusPill(a.status)))));
+  body.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
+    el('table', {}, el('thead', {}, el('tr', {}, ...['When', 'Service', 'Customer', 'Salon', 'Status'].map((h) => el('th', {}, h)))), tb)));
 }
 
 // ---- auth screen ----------------------------------------------------------
@@ -587,7 +621,9 @@ function openServiceModal(refresh, s) {
 // ---- STAFF ----------------------------------------------------------------
 PAGES.staff = async (root) => {
   root.append(el('div', { class: 'page-head' }, el('h1', {}, 'Staff'),
-    el('button', { class: 'btn', onclick: () => openStaffModal(() => navigate('staff')) }, '+ Add staff')));
+    el('div', { style: 'display:flex;gap:8px' },
+      el('button', { class: 'btn ghost', onclick: () => openLinkEmployee(() => navigate('staff')) }, '+ Link employee'),
+      el('button', { class: 'btn', onclick: () => openStaffModal(() => navigate('staff')) }, '+ Add staff'))));
   let list = [];
   try { list = await API.staff.list(state.salon.id); } catch (e) { return errToast(e); }
   if (!list.length) return root.append(el('div', { class: 'card empty' }, 'No staff yet. Add the people who take appointments.'));
@@ -658,6 +694,21 @@ async function openHoursModal(s, refresh) {
     const payload = rows.filter((r) => r.on.checked).map((r) => ({ dow: r.dow, start_time: r.start.value, end_time: r.end.value }));
     if (payload.some((p) => p.end_time <= p.start_time)) return toast('End time must be after start time', true);
     try { await API.hours.setForStaff(state.salon.id, s.id, payload); close(); toast('Hours saved'); if (refresh) refresh(); }
+    catch (e) { errToast(e); }
+  }
+}
+
+function openLinkEmployee(refresh) {
+  const f = {};
+  const wrap = el('div', {},
+    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Link an employee who already created a Glowup Book employee account. Enter the email they signed up with.'),
+    field('Employee email', f.email = el('input', { type: 'email' })),
+    field('Display name (optional)', f.name = el('input', { placeholder: 'Shown on the calendar' })),
+    el('button', { class: 'btn block', onclick: save }, 'Link employee'));
+  const close = modal('Link an employee', wrap);
+  async function save() {
+    if (!f.email.value.trim()) return toast('Enter their email', true);
+    try { await API.staff.linkEmployee(state.salon.id, f.email.value.trim(), f.name.value.trim()); close(); refresh(); toast('Employee linked'); }
     catch (e) { errToast(e); }
   }
 }
@@ -815,7 +866,7 @@ async function renderDirAuth() {
   if (API.enabled) { try { user = await API.auth.currentUser(); if (user) prof = await API.auth.profile(); } catch { /* offline */ } }
   if (user) {
     box.append(
-      el('button', { class: 'btn ghost sm', onclick: openMyBookings }, '📅 My bookings'),
+      el('button', { class: 'btn ghost sm', onclick: () => openCustomerProfile() }, '👤 My account'),
       el('span', { class: 'who' }, prof?.full_name || user.email),
       el('button', { class: 'btn ghost sm', onclick: async () => { await API.auth.signOut(); location.reload(); } }, 'Sign out'),
     );
@@ -828,47 +879,146 @@ async function renderDirAuth() {
 }
 
 function openCustomerAuth(onDone) {
-  let mode = 'login';
+  let mode = 'login', role = 'customer';
   const f = {};
   const nameField = field('Your name', f.name = el('input', { autocomplete: 'name' }));
   const submitBtn = el('button', { class: 'btn block', onclick: submit }, 'Log in');
   const tabLogin = el('button', { class: 'on' }, 'Log in');
   const tabSignup = el('button', {}, 'Sign up');
-  const wrap = el('div', {},
-    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Create a free account to book and manage your appointments at any salon.'),
-    el('div', { class: 'tabs' }, tabLogin, tabSignup),
-    nameField,
+  // role chooser (signup only): customer vs employee
+  const roleCust = el('button', { class: 'on' }, "I'm a customer");
+  const roleEmp = el('button', {}, "I'm an employee");
+  const roleRow = field('I want to', el('div', { class: 'tabs' }, roleCust, roleEmp));
+  const blurb = el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Create a free account to book and manage your appointments at any salon.');
+  const wrap = el('div', {}, blurb, el('div', { class: 'tabs' }, tabLogin, tabSignup), roleRow, nameField,
     field('Email', f.email = el('input', { type: 'email', autocomplete: 'email' })),
-    field('Password', f.pass = el('input', { type: 'password' })),
-    submitBtn,
-  );
+    field('Password', f.pass = el('input', { type: 'password' })), submitBtn);
+  const setRole = (r) => { role = r; roleCust.classList.toggle('on', r === 'customer'); roleEmp.classList.toggle('on', r === 'staff');
+    blurb.textContent = r === 'staff' ? 'Create your employee account, then ask your salon admin to add you by your email.' : 'Create a free account to book and manage your appointments at any salon.'; };
+  roleCust.onclick = () => setRole('customer'); roleEmp.onclick = () => setRole('staff');
   const setMode = (m) => {
     mode = m;
-    tabLogin.classList.toggle('on', m === 'login');
-    tabSignup.classList.toggle('on', m === 'signup');
+    tabLogin.classList.toggle('on', m === 'login'); tabSignup.classList.toggle('on', m === 'signup');
+    roleRow.classList.toggle('hidden', m === 'login');
     nameField.classList.toggle('hidden', m === 'login');
     submitBtn.textContent = m === 'login' ? 'Log in' : 'Create account';
   };
-  tabLogin.onclick = () => setMode('login');
-  tabSignup.onclick = () => setMode('signup');
-  setMode('login');
-  const close = modal('Customer account', wrap);
+  tabLogin.onclick = () => setMode('login'); tabSignup.onclick = () => setMode('signup');
+  setRole('customer'); setMode('login');
+  const close = modal('Your account', wrap);
   async function submit() {
     const email = f.email.value.trim(), password = f.pass.value;
     if (!email || !password) return toast('Enter email and password', true);
     try {
       if (mode === 'signup') {
-        const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role: 'customer' });
+        const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role });
         if (!res?.session) { showEmailConfirmNotice(wrap, email); toast('Check your email to confirm.'); return; }
+        close();
+        if (role === 'staff') { location.href = '/app'; return; }   // employee → their profile
       } else {
         await API.auth.signIn({ email, password });
         toast('Welcome back!');
+        close();
       }
-      close(); if (onDone) onDone();
+      // a logged-in employee/owner/admin shouldn't stay on the directory account UI
+      const prof = await API.auth.profile();
+      if (prof && prof.role !== 'customer') { location.href = '/app'; return; }
+      if (onDone) onDone();
     } catch (e) {
       if (/confirm/i.test(e?.message || '')) { showEmailConfirmNotice(wrap, email, { prefix: 'Please confirm your email first.' }); return; }
       errToast(e);
     }
+  }
+}
+
+// ---- Customer profile (account) — tabs: bookings, favorites, reviews, info -
+async function openCustomerProfile() {
+  const tabsBar = el('div', { class: 'tabs' });
+  const content = el('div', { style: 'margin-top:8px' });
+  const wrap = el('div', {}, tabsBar, content);
+  const close = modal('My account', wrap, { wide: true });
+  const tabs = { Bookings: tabBookings, Favorites: tabFavorites, Reviews: tabReviews, Info: tabInfo };
+  const btns = {};
+  Object.keys(tabs).forEach((name) => {
+    const b = el('button', { class: name === 'Bookings' ? 'on' : '', onclick: () => select(name) }, name);
+    btns[name] = b; tabsBar.append(b);
+  });
+  function select(name) { Object.entries(btns).forEach(([n, b]) => b.classList.toggle('on', n === name)); content.innerHTML = '<p class="muted">Loading…</p>'; tabs[name](); }
+
+  async function tabBookings() {
+    let list = [], rated = {};
+    try { [list, rated] = await Promise.all([API.customer.myBookings(), API.customer.reviewsByAppointment()]); }
+    catch (e) { content.innerHTML = ''; return content.append(el('div', { class: 'banner' }, e.message)); }
+    content.innerHTML = '';
+    if (!list.length) return content.append(el('div', { class: 'empty' }, 'No bookings yet. Browse salons and book your first appointment!'));
+    list.forEach((b) => {
+      const past = new Date(b.starts_at) < new Date();
+      const upcoming = !past && b.status !== 'cancelled';
+      const actions = el('div', { style: 'display:flex;gap:6px;align-items:center' });
+      if (upcoming) actions.append(el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm('Cancel this booking?')) return; try { await API.customer.cancel(b.id); select('Bookings'); toast('Cancelled'); } catch (e) { errToast(e); } } }, 'Cancel'));
+      else if (b.status !== 'cancelled') {
+        actions.append(rated[b.id]
+          ? el('span', { class: 'stars' }, '★'.repeat(rated[b.id]) + '☆'.repeat(5 - rated[b.id]))
+          : el('button', { class: 'btn sm', onclick: () => openRate(b, () => select('Bookings')) }, 'Rate'));
+      }
+      content.append(el('div', { class: 'choice', style: 'cursor:default' },
+        el('div', {}, el('strong', {}, b.service_name || 'Appointment'),
+          el('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 6px' },
+            `${b.salon_name} · ${new Date(b.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}${b.staff_name ? ' · ' + b.staff_name : ''}`),
+          statusPill(b.status)),
+        actions));
+    });
+  }
+  async function tabFavorites() {
+    let favs = [];
+    try { favs = await API.customer.favorites(); } catch (e) { content.innerHTML = ''; return content.append(el('div', { class: 'banner' }, e.message)); }
+    content.innerHTML = '';
+    if (!favs.length) return content.append(el('div', { class: 'empty' }, 'No favorites yet. Tap the ♥ on a salon to save it.'));
+    favs.map((r) => r.salon).filter(Boolean).forEach((s) => content.append(el('div', { class: 'choice' },
+      el('a', { href: `/${s.slug}`, style: 'text-decoration:none;color:inherit' }, el('strong', {}, s.name),
+        el('div', { class: 'muted', style: 'font-size:13px' }, [TYPE_LABELS[s.business_type], s.city].filter(Boolean).join(' · '))),
+      el('button', { class: 'btn ghost sm', onclick: async () => { try { await API.customer.removeFavorite(s.id); select('Favorites'); } catch (e) { errToast(e); } } }, 'Remove'))));
+  }
+  async function tabReviews() {
+    let revs = [];
+    try { revs = await API.customer.myReviews(); } catch (e) { content.innerHTML = ''; return content.append(el('div', { class: 'banner' }, e.message)); }
+    content.innerHTML = '';
+    if (!revs.length) return content.append(el('div', { class: 'empty' }, 'You haven\'t reviewed any appointments yet.'));
+    revs.forEach((r) => content.append(el('div', { class: 'choice', style: 'cursor:default' },
+      el('div', {}, el('span', { class: 'stars' }, '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)),
+        el('div', { style: 'font-weight:600;margin-top:4px' }, r.salon?.name || ''),
+        r.comment ? el('div', { class: 'muted', style: 'font-size:13px' }, r.comment) : ''))));
+  }
+  async function tabInfo() {
+    let prof = null, user = null;
+    try { [prof, user] = await Promise.all([API.auth.profile(), API.auth.currentUser()]); } catch (e) { return errToast(e); }
+    content.innerHTML = ''; const f = {};
+    content.append(
+      field('Name', f.name = el('input', { value: prof?.full_name || '' })),
+      field('Phone', f.phone = el('input', { value: prof?.phone || '' })),
+      el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:12px' }, `Email: ${user?.email || ''}`),
+      el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null }); toast('Saved'); renderDirAuth(); } catch (e) { errToast(e); } } }, 'Save changes'));
+  }
+  select('Bookings');
+}
+
+// Star-rating dialog for a past appointment.
+function openRate(booking, onDone) {
+  let rating = 5;
+  const stars = el('div', { class: 'star-input' });
+  const draw = () => [...stars.children].forEach((sp, i) => sp.classList.toggle('on', i < rating));
+  for (let i = 1; i <= 5; i++) { const sp = el('span', { onclick: () => { rating = i; draw(); } }, '★'); stars.append(sp); }
+  draw();
+  const comment = el('textarea', { rows: 3, placeholder: 'Optional: how was it?' });
+  const wrap = el('div', {},
+    el('p', { style: 'margin-top:0' }, el('strong', {}, booking.service_name || 'Appointment'), el('span', { class: 'muted' }, ` · ${booking.salon_name}`)),
+    field('Your rating', stars), field('Comment', comment),
+    el('button', { class: 'btn block', onclick: save }, 'Submit review'));
+  const close = modal('Rate your visit', wrap);
+  async function save() {
+    try { await API.customer.review({ appointmentId: booking.id, salonId: booking.salon_id, rating, comment: comment.value.trim() }); }
+    catch (e) { return errToast(e); }
+    close(); toast('Thanks for the review!'); if (onDone) onDone();
   }
 }
 
@@ -965,6 +1115,21 @@ async function startStorefront(sl) {
         salon.phone ? `In the meantime, you can call ${salon.phone}.` : 'Browse other salons in the meantime.')));
     return;
   }
+
+  // Rating + favorite (♥) for published salons.
+  const meta = el('div', { style: 'margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap' });
+  hero.append(meta);
+  API.storefront.rating(salon.id).then((r) => { if (r && r.review_count > 0) meta.append(el('span', { class: 'stars', style: 'color:#FFD27A;font-weight:700' }, `★ ${r.avg_rating} (${r.review_count})`)); }).catch(() => {});
+  (async () => {
+    let user = null; try { user = await API.auth.currentUser(); } catch { /* */ }
+    if (!user) return;
+    let faved = false; try { faved = (await API.customer.favoriteIds()).includes(salon.id); } catch { /* */ }
+    const btn = el('button', { class: 'btn sm', style: 'background:rgba(255,255,255,.18);color:#fff' });
+    const paint = () => { btn.textContent = faved ? '♥ Saved' : '♡ Save'; };
+    paint();
+    btn.onclick = async () => { try { faved ? await API.customer.removeFavorite(salon.id) : await API.customer.addFavorite(salon.id); faved = !faved; paint(); toast(faved ? 'Added to favorites' : 'Removed from favorites'); } catch (e) { errToast(e); } };
+    meta.append(btn);
+  })();
 
   const flow = el('div'); root.append(flow);
 

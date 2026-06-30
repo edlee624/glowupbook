@@ -194,7 +194,11 @@
   .dir-wrap{max-width:1100px;margin:0 auto;padding:14px 24px 50px;}
   /* admin console */
   #screen-admin{display:none;} #screen-admin.active{display:block;}
+  #screen-employee{display:none;} #screen-employee.active{display:block;}
   .admin-wrap{max-width:1100px;margin:0 auto;padding:18px 24px 60px;}
+  .stars{color:var(--amber);letter-spacing:2px;}
+  .star-input span{cursor:pointer;font-size:26px;color:var(--line);}
+  .star-input span.on{color:var(--amber);}
   .admin-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;}
   /* directory list/map toggle */
   .dir-viewtoggle{display:inline-flex;gap:4px;background:var(--paper-dim);padding:4px;border-radius:12px;margin-bottom:16px;}
@@ -340,6 +344,15 @@
     <a href="/" class="store-back muted">‹ All salons</a>
     <div id="store-body"></div>
   </div>
+</section>
+
+<!-- ====================== EMPLOYEE PROFILE ====================== -->
+<section id="screen-employee" class="screen">
+  <header class="dir-nav">
+    <a class="brand" href="/app" style="text-decoration:none;color:inherit"><img src="/logo.png" class="brand-logo" alt=""> Glowup Book <span style="font-size:13px;color:var(--grey);font-weight:500">· Employee</span></a>
+    <button class="btn ghost sm" id="emp-signout">Sign out</button>
+  </header>
+  <div class="admin-wrap" id="emp-body"></div>
 </section>
 
 <!-- ====================== SUPER-ADMIN CONSOLE ====================== -->

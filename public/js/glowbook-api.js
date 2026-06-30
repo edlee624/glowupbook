@@ -73,6 +73,10 @@ const auth = {
     const data = unwrap(await client().from('profiles').select('*').eq('id', u.id).limit(1));
     return (data || [])[0] || null;
   },
+  async updateProfile(patch) {
+    const u = await this.currentUser();
+    return unwrap(await client().from('profiles').update(patch).eq('id', u.id).select().single());
+  },
   onChange(cb) {
     if (!supabase) return () => {};
     const { data } = supabase.auth.onAuthStateChange((_e, session) => cb(session?.user || null));
@@ -82,9 +86,16 @@ const auth = {
 
 // ---- Salons ---------------------------------------------------------------
 const salons = {
-  // The salon(s) the current user owns/belongs to. Most owners have exactly one.
+  // The salon(s) the current user owns/belongs to. Uses an RPC so the 10k public
+  // seed salons don't leak in. Falls back to a filtered query pre-migration.
   async mine() {
-    return unwrap(await client().from('salons').select('*').order('created_at')) || [];
+    let { data, error } = await client().rpc('my_salons');
+    if (error) {
+      const u = await auth.currentUser();
+      ({ data, error } = await client().from('salons').select('*').eq('owner_id', u?.id).order('created_at'));
+    }
+    if (error) throw error;
+    return data || [];
   },
   async create({ name, slug, businessType, timezone, currency }) {
     const user = await auth.currentUser();
@@ -184,6 +195,11 @@ const staff = {
   async getServiceIds(staffId) {
     const data = unwrap(await client().from('staff_services').select('service_id').eq('staff_id', staffId)) || [];
     return data.map((r) => r.service_id);
+  },
+  // Link a self-registered employee account (by email) to this salon.
+  async linkEmployee(salonId, email, name) {
+    const { error } = await client().rpc('link_employee', { p_salon: salonId, p_email: email, p_name: name || null });
+    if (error) throw error;
   },
 };
 
@@ -315,6 +331,10 @@ const storefront = {
       p_customer_name: name, p_customer_email: email, p_customer_phone: phone, p_notes: notes,
     }));
   },
+  async rating(salonId) {
+    const data = unwrap(await client().rpc('salon_rating', { p_salon: salonId }));
+    return (data || [])[0] || { avg_rating: null, review_count: 0 };
+  },
 };
 
 // ---- Logged-in customer (their own bookings across all salons) ------------
@@ -326,10 +346,52 @@ const customer = {
     const { error } = await client().rpc('cancel_my_appointment', { p_appt: apptId });
     if (error) throw error;
   },
+  // Favorites
+  async favorites() {
+    return unwrap(await client().from('favorites')
+      .select('salon:salons(id,name,slug,business_type,city,address)')
+      .order('created_at', { ascending: false })) || [];
+  },
+  async favoriteIds() {
+    const data = unwrap(await client().from('favorites').select('salon_id')) || [];
+    return data.map((r) => r.salon_id);
+  },
+  async addFavorite(salonId) {
+    const u = await auth.currentUser();
+    const { error } = await client().from('favorites').insert({ account_id: u.id, salon_id: salonId });
+    if (error && error.code !== '23505') throw error;   // ignore duplicate
+  },
+  async removeFavorite(salonId) {
+    const { error } = await client().from('favorites').delete().eq('salon_id', salonId);
+    if (error) throw error;
+  },
+  // Reviews
+  async myReviews() {
+    return unwrap(await client().from('reviews')
+      .select('*, salon:salons(name,slug)').order('created_at', { ascending: false })) || [];
+  },
+  async review({ appointmentId, salonId, rating, comment }) {
+    const u = await auth.currentUser();
+    return unwrap(await client().from('reviews')
+      .upsert({ account_id: u.id, appointment_id: appointmentId, salon_id: salonId, rating, comment: comment || null },
+        { onConflict: 'appointment_id' }).select().single());
+  },
+  async reviewsByAppointment() {
+    const data = unwrap(await client().from('reviews').select('appointment_id,rating')) || [];
+    const map = {}; data.forEach((r) => { if (r.appointment_id) map[r.appointment_id] = r.rating; });
+    return map;
+  },
+};
+
+// ---- Logged-in employee ---------------------------------------------------
+const employee = {
+  async myAppointments() {
+    return unwrap(await client().rpc('my_staff_appointments')) || [];
+  },
 };
 
 window.GlowbookAPI = {
   enabled,
   raw: supabase,
-  auth, salons, services, staff, hours, customers, appointments, storefront, customer, admin,
+  auth, salons, services, staff, hours, customers, appointments, storefront, customer, employee, admin,
 };
