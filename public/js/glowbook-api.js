@@ -110,6 +110,32 @@ const salons = {
   async claim(salonId) {
     return unwrap(await client().rpc('claim_salon', { p_salon: salonId }));
   },
+  async remove(id) {
+    const { error } = await client().from('salons').delete().eq('id', id);
+    if (error) throw error;
+  },
+};
+
+// ---- Platform super-admin -------------------------------------------------
+const admin = {
+  async overview() {
+    return unwrap(await client().rpc('admin_overview')) || {};
+  },
+  // Admin RLS lets this return ALL salons (not just the admin's own).
+  async salons({ search, limit = 100 } = {}) {
+    let q = client().from('salons')
+      .select('id,name,slug,business_type,city,claimed,is_published,owner_id,created_at')
+      .order('created_at', { ascending: false }).limit(limit);
+    if (search) q = q.or(`name.ilike.*${search}*,city.ilike.*${search}*,slug.ilike.*${search}*`);
+    return unwrap(await q) || [];
+  },
+  async setPublished(id, value) {
+    return unwrap(await client().from('salons').update({ is_published: value }).eq('id', id).select().single());
+  },
+  async remove(id) {
+    const { error } = await client().from('salons').delete().eq('id', id);
+    if (error) throw error;
+  },
 };
 
 // ---- Services -------------------------------------------------------------
@@ -232,16 +258,20 @@ const storefront = {
   // .or() for search without two .or() clauses colliding). Published (bookable)
   // salons sort first; capped since the directory can hold thousands.
   async directory({ search, type } = {}) {
-    const build = (withClaimed) => {
-      let q = client().from('salons')
-        .select('id,name,slug,business_type,about,city,address,logo_url,cover_url,is_published' + (withClaimed ? ',claimed' : ''))
+    // Degrade gracefully if a migration hasn't run yet: level 2 = +lat/lon,
+    // level 1 = +claimed, level 0 = base columns only.
+    const build = (level) => {
+      const cols = 'id,name,slug,business_type,about,city,address,logo_url,cover_url,is_published'
+        + (level >= 1 ? ',claimed' : '') + (level >= 2 ? ',lat,lon' : '');
+      let q = client().from('salons').select(cols)
         .order('is_published', { ascending: false }).order('name').limit(60);
       if (type) q = q.eq('business_type', type);
       if (search) q = q.or(`name.ilike.*${search}*,city.ilike.*${search}*`);
       return q;
     };
-    let { data, error } = await build(true);
-    if (error && /claimed/i.test(error.message || '')) ({ data, error } = await build(false));
+    let { data, error } = await build(2);
+    if (error && /(lat|lon)/i.test(error.message || '')) ({ data, error } = await build(1));
+    if (error && /claimed/i.test(error.message || '')) ({ data, error } = await build(0));
     if (error) throw error;
     return data || [];
   },
@@ -301,5 +331,5 @@ const customer = {
 window.GlowbookAPI = {
   enabled,
   raw: supabase,
-  auth, salons, services, staff, hours, customers, appointments, storefront, customer,
+  auth, salons, services, staff, hours, customers, appointments, storefront, customer, admin,
 };

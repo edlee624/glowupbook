@@ -130,10 +130,12 @@ async function afterLogin() {
         if (s && !s.claimed) { await API.salons.claim(s.id); claimed = true; toast('Salon claimed! Finish setting it up below.'); }
       } catch (e) { errToast(e); }
     }
+    const prof = await API.auth.profile();
+    // Platform super-admins land in the admin console.
+    if (!claimed && prof?.role === 'admin') { startAdmin(); return; }
     const mine = await API.salons.mine();
     if (!mine.length) {
       // A customer account has no salon — send them to the public directory.
-      const prof = await API.auth.profile();
       if (prof?.role === 'customer') { location.href = '/'; return; }
       wireOnboarding(); show('#screen-onboarding'); return;
     }
@@ -142,6 +144,56 @@ async function afterLogin() {
     show('#screen-app');
     navigate(claimed ? 'settings' : 'calendar');
   } catch (e) { errToast(e); }
+}
+
+// ---- super-admin console --------------------------------------------------
+async function startAdmin() {
+  $('#admin-signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
+  show('#screen-admin');
+  const body = $('#admin-body');
+  body.innerHTML = '<p class="muted">Loading…</p>';
+  let ov = {};
+  try { ov = await API.admin.overview(); } catch (e) { body.innerHTML = ''; return errToast(e); }
+  body.innerHTML = '';
+  const stats = [
+    ['Salons', ov.salons_total], ['Claimed', ov.salons_claimed], ['Published', ov.salons_published],
+    ['Customers', ov.customers], ['Appointments', ov.appointments], ['Users', ov.users],
+  ];
+  const statGrid = el('div', { class: 'admin-stats' });
+  stats.forEach(([label, val]) => statGrid.append(el('div', { class: 'card', style: 'text-align:center' },
+    el('div', { style: 'font-size:28px;font-weight:800;font-family:Fraunces,serif' }, String(val ?? '—')),
+    el('div', { class: 'muted', style: 'font-size:13px' }, label))));
+  body.append(el('h1', { style: 'margin-bottom:14px' }, 'Admin'), statGrid);
+
+  const search = el('input', { placeholder: 'Search salons by name, city, slug…', style: 'max-width:340px;margin:20px 0 12px' });
+  body.append(search);
+  const tableWrap = el('div'); body.append(tableWrap);
+  let t;
+  async function load() {
+    let list = [];
+    try { list = await API.admin.salons({ search: search.value.trim() }); } catch (e) { return errToast(e); }
+    tableWrap.innerHTML = '';
+    if (!list.length) { tableWrap.append(el('div', { class: 'card empty' }, 'No salons found.')); return; }
+    const tb = el('tbody');
+    list.forEach((s) => {
+      const livePill = el('span', { class: 'pill', style: s.is_published ? 'background:#E2F6F2;color:var(--mint)' : 'background:var(--paper-dim);color:var(--grey)' }, s.is_published ? 'Live' : 'Off');
+      tb.append(el('tr', {},
+        el('td', {}, el('a', { href: `/${s.slug}`, target: '_blank' }, s.name)),
+        el('td', {}, TYPE_LABELS[s.business_type] || s.business_type || '—'),
+        el('td', {}, s.city || '—'),
+        el('td', {}, s.claimed ? 'claimed' : el('span', { class: 'muted' }, 'unclaimed')),
+        el('td', {}, livePill),
+        el('td', {},
+          el('button', { class: 'btn ghost sm', onclick: async () => { try { await API.admin.setPublished(s.id, !s.is_published); load(); toast('Updated'); } catch (e) { errToast(e); } } }, s.is_published ? 'Unpublish' : 'Publish'),
+          ' ',
+          el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm(`Delete "${s.name}"? This removes the salon and all its data.`)) return; try { await API.admin.remove(s.id); load(); toast('Deleted'); } catch (e) { errToast(e); } } }, 'Delete')),
+      ));
+    });
+    tableWrap.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
+      el('table', {}, el('thead', {}, el('tr', {}, ...['Salon', 'Type', 'City', 'Listing', 'Bookable', 'Actions'].map((h) => el('th', {}, h)))), tb)));
+  }
+  search.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
+  load();
 }
 
 // ---- auth screen ----------------------------------------------------------
@@ -571,6 +623,15 @@ PAGES.settings = async (root) => {
       field('Timezone', f.tz = el('input', { value: s.timezone || 'UTC' })),
       field('Currency', f.cur = el('input', { value: s.currency || 'USD' })),
     ),
+    el('h3', { style: 'font-size:16px;margin:6px 0 10px' }, 'Social links'),
+    el('div', { class: 'row' },
+      field('Instagram', f.instagram = el('input', { value: s.instagram || '', placeholder: '@yoursalon or URL' })),
+      field('TikTok', f.tiktok = el('input', { value: s.tiktok || '', placeholder: '@yoursalon or URL' })),
+    ),
+    el('div', { class: 'row' },
+      field('Facebook', f.facebook = el('input', { value: s.facebook || '', placeholder: 'page name or URL' })),
+      field('Website', f.website = el('input', { value: s.website || '', placeholder: 'https://…' })),
+    ),
     el('button', { class: 'btn', onclick: save }, 'Save settings'),
   );
   root.append(card);
@@ -580,6 +641,8 @@ PAGES.settings = async (root) => {
         name: f.name.value.trim(), about: f.about.value.trim() || null, phone: f.phone.value.trim() || null,
         email: f.email.value.trim() || null, address: f.address.value.trim() || null,
         timezone: f.tz.value.trim() || 'UTC', currency: f.cur.value.trim() || 'USD',
+        instagram: f.instagram.value.trim() || null, tiktok: f.tiktok.value.trim() || null,
+        facebook: f.facebook.value.trim() || null, website: f.website.value.trim() || null,
       });
       toast('Saved'); navigate('settings');
     } catch (e) { errToast(e); }
@@ -599,17 +662,14 @@ async function startDirectory() {
   show('#screen-directory');
   renderDirAuth();
   const grid = $('#dir-grid'), q = $('#dir-q'), type = $('#dir-type');
-  let t;
-  async function load() {
-    grid.innerHTML = '<p class="muted">Loading salons…</p>';
-    if (!API.enabled) { grid.innerHTML = ''; grid.append(el('div', { class: 'banner' }, 'Directory not connected to a backend yet.')); return; }
-    let salons = [];
-    try { salons = await API.storefront.directory({ search: q.value.trim(), type: type.value }); }
-    catch (e) { grid.innerHTML = ''; return errToast(e); }
+  const mapEl = $('#dir-map'), btnList = $('#view-list'), btnMap = $('#view-map');
+  let t, view = 'list', lastResults = [];
+
+  function renderList(salons) {
     grid.innerHTML = '';
     if (!salons.length) {
-      const msg = (q.value.trim() || type.value) ? 'No salons match your search.' : 'No salons are listed yet — be the first to add yours!';
-      grid.append(el('div', { class: 'empty', style: 'grid-column:1/-1' }, msg));
+      grid.append(el('div', { class: 'empty', style: 'grid-column:1/-1' },
+        (q.value.trim() || type.value) ? 'No salons match your search.' : 'No salons are listed yet — be the first to add yours!'));
       return;
     }
     salons.forEach((s) => grid.append(salonCard(s)));
@@ -618,9 +678,70 @@ async function startDirectory() {
         'Showing the first 60 salons — search by name or city, or pick a type, to narrow it down.'));
     }
   }
+
+  async function load() {
+    if (!API.enabled) { grid.innerHTML = ''; grid.append(el('div', { class: 'banner' }, 'Directory not connected to a backend yet.')); return; }
+    if (view === 'list') grid.innerHTML = '<p class="muted">Loading salons…</p>';
+    try { lastResults = await API.storefront.directory({ search: q.value.trim(), type: type.value }); }
+    catch (e) { grid.innerHTML = ''; return errToast(e); }
+    if (view === 'list') renderList(lastResults); else renderMap(mapEl, lastResults);
+  }
+
+  function setView(v) {
+    view = v;
+    btnList.classList.toggle('on', v === 'list');
+    btnMap.classList.toggle('on', v === 'map');
+    grid.classList.toggle('hidden', v === 'map');
+    mapEl.classList.toggle('hidden', v === 'list');
+    if (v === 'list') renderList(lastResults); else renderMap(mapEl, lastResults);
+  }
+  btnList.onclick = () => setView('list');
+  btnMap.onclick = () => setView('map');
+
   q.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   type.onchange = load;
   load();
+}
+
+// Lazy-load Leaflet (map library) only when the map view is first opened.
+let _leafletPromise = null;
+function ensureLeaflet() {
+  if (window.L) return Promise.resolve(window.L);
+  if (_leafletPromise) return _leafletPromise;
+  _leafletPromise = new Promise((resolve, reject) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.append(css);
+    const js = document.createElement('script');
+    js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    js.onload = () => resolve(window.L);
+    js.onerror = () => reject(new Error('Could not load the map library.'));
+    document.head.append(js);
+  });
+  return _leafletPromise;
+}
+
+let _map = null, _markers = null;
+async function renderMap(container, salons) {
+  let L;
+  try { L = await ensureLeaflet(); } catch (e) { container.innerHTML = ''; container.append(el('div', { class: 'banner' }, e.message)); return; }
+  if (!_map) {
+    _map = L.map(container).setView([40.7128, -74.006], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap',
+    }).addTo(_map);
+    _markers = L.layerGroup().addTo(_map);
+  }
+  setTimeout(() => _map.invalidateSize(), 50);   // container just became visible
+  _markers.clearLayers();
+  const pts = [];
+  salons.forEach((s) => {
+    if (s.lat == null || s.lon == null) return;
+    const m = L.marker([s.lat, s.lon]).bindPopup(
+      `<a href="/${s.slug}">${s.name}</a><br><span style="color:#8B8898;font-size:12px">${TYPE_LABELS[s.business_type] || ''}${s.city ? ' · ' + s.city : ''}</span>`);
+    _markers.addLayer(m); pts.push([s.lat, s.lon]);
+  });
+  if (pts.length) _map.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
 }
 
 // Directory header auth area: customer log in / sign up, or account + bookings.
@@ -730,6 +851,28 @@ function salonCard(s) {
     ));
 }
 
+// Normalize a stored social value (handle or URL) into a full link.
+function socialUrl(kind, v) {
+  if (!v) return null;
+  v = String(v).trim();
+  if (/^https?:\/\//i.test(v)) return v;
+  const h = v.replace(/^@/, '');
+  if (kind === 'instagram') return `https://instagram.com/${h}`;
+  if (kind === 'tiktok') return `https://tiktok.com/@${h}`;
+  if (kind === 'facebook') return `https://facebook.com/${h}`;
+  return `https://${v}`;
+}
+function socialLinks(salon) {
+  const defs = [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['facebook', 'Facebook'], ['website', 'Website']];
+  const links = defs
+    .map(([k, label]) => { const u = socialUrl(k, salon[k]); return u ? el('a', { href: u, target: '_blank', rel: 'noopener', style: 'color:#fff;text-decoration:underline;font-size:13px;opacity:.95' }, label) : null; })
+    .filter(Boolean);
+  if (!links.length) return document.createTextNode('');
+  const row = el('div', { style: 'margin-top:12px;display:flex;gap:14px;flex-wrap:wrap' });
+  links.forEach((a) => row.append(a));
+  return row;
+}
+
 // ===========================================================================
 // PUBLIC STOREFRONT
 // ===========================================================================
@@ -745,7 +888,8 @@ async function startStorefront(sl) {
   const hero = el('div', { class: 'store-hero' },
     el('h1', {}, salon.name),
     salon.about ? el('p', { style: 'opacity:.92;margin:8px 0 0' }, salon.about) : '',
-    el('p', { style: 'opacity:.85;margin:10px 0 0;font-size:14px' }, [salon.address, salon.phone].filter(Boolean).join(' · ')));
+    el('p', { style: 'opacity:.85;margin:10px 0 0;font-size:14px' }, [salon.address, salon.phone, salon.email].filter(Boolean).join(' · ')),
+    socialLinks(salon));
   root.append(hero);
 
   // Unclaimed seed listing — no online booking set up yet. Offer to claim it.
