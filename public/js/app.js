@@ -3,7 +3,7 @@
 //   • /<salon-slug>  → public storefront booking flow (anonymous)
 //   • / (root)       → auth → onboarding → dashboard (salon members)
 // ============================================================================
-const API = window.GlowbookAPI;
+let API = window.GlowbookAPI;   // reassigned to an in-memory mock in demo mode
 
 // ---- tiny DOM helpers -----------------------------------------------------
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -72,7 +72,7 @@ const RESERVED = new Set([
   'dashboard', 'admin', 'api', 'book', 'booking', 'about', 'pricing', 'terms',
   'privacy', 'legal', 'help', 'support', 'contact', 'blog', 'settings',
   'account', 'profile', 'assets', 'static', 'js', 'css', 'img', 'images',
-  'fonts', 'config', 'favicon', 'robots', 'sitemap', 'index', 'www', 'home', 'confirm',
+  'fonts', 'config', 'favicon', 'robots', 'sitemap', 'index', 'www', 'home', 'confirm', 'demo',
 ]);
 
 // Returns the salon slug if the current URL is a storefront, else null.
@@ -93,6 +93,7 @@ async function boot() {
   const sl = storefrontSlug();
   if (sl) return startStorefront(sl);
   const p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (p === 'demo') return startDemo();
   if (APP_PATHS.has(p)) return startDashboardApp();
   startDirectory();   // root (and any other public path) → directory
 }
@@ -214,6 +215,70 @@ async function startAdmin() {
   }
   search.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   load();
+}
+
+// ---- live owner-CRM demo (no signup, in-memory) ---------------------------
+function buildDemoData() {
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'd' + Math.random().toString(36).slice(2));
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; } catch { return 'America/New_York'; } })();
+  const salon = { id: uid(), name: 'Demo Salon', slug: 'demo', business_type: 'hair', timezone: tz, currency: 'USD', is_published: true, claimed: true, about: 'A sample salon so you can explore the dashboard.', phone: '(212) 555-0100', email: 'demo@glowupbook.com', address: '123 Demo Ave', city: 'New York' };
+  const svc = (name, dur, price) => ({ id: uid(), salon_id: salon.id, name, description: null, duration_min: dur, buffer_min: 0, price, is_active: true, bookable_online: true, sort_order: 0 });
+  const services = [svc("Women's Haircut", 45, 65), svc("Men's Haircut", 30, 35), svc('Balayage', 120, 180), svc('Gel Manicure', 45, 45), svc('Blowout', 30, 40)];
+  const mkStaff = (name, title, color) => ({ id: uid(), salon_id: salon.id, name, title, color, is_active: true, accepts_online_booking: true, sort_order: 0 });
+  const staff = [mkStaff('Jordan Lee', 'Senior Stylist', '#6C4AB6'), mkStaff('Riley Kim', 'Nail & Beauty Tech', '#FF6FA5'), mkStaff('Sam Alvarez', 'Barber', '#2BB6A3')];
+  const staffServices = { [staff[0].id]: [services[0].id, services[1].id, services[2].id, services[4].id], [staff[1].id]: [services[3].id, services[0].id], [staff[2].id]: [services[1].id] };
+  const hours = []; staff.forEach((s) => { for (let d = 1; d <= 6; d++) hours.push({ id: uid(), salon_id: salon.id, staff_id: s.id, dow: d, start_time: '09:00', end_time: '18:00' }); });
+  const cust = (name, email, phone) => ({ id: uid(), salon_id: salon.id, name, email, phone, notes: null });
+  const customers = [cust('Maya Patel', 'maya@example.com', '(212) 555-1001'), cust('Chris Doe', 'chris@example.com', '(212) 555-1002'), cust('Sam Rivera', 'sam@example.com', '(212) 555-1003'), cust('Ava Thompson', 'ava@example.com', '(212) 555-1004'), cust('Liam Chen', 'liam@example.com', '(212) 555-1005'), cust('Noah Kim', null, '(212) 555-1006')];
+  const appts = [];
+  const mk = (off, h, m, ci, si, vi, status) => { const s = new Date(); s.setDate(s.getDate() + off); s.setHours(h, m, 0, 0); const service = services[vi]; const e = new Date(s.getTime() + service.duration_min * 60000); appts.push({ id: uid(), salon_id: salon.id, customer_id: customers[ci].id, staff_id: staff[si].id, service_id: service.id, starts_at: s.toISOString(), ends_at: e.toISOString(), status, source: 'manual', price: service.price, notes: null, customer: { name: customers[ci].name, email: customers[ci].email, phone: customers[ci].phone }, staff: { name: staff[si].name, color: staff[si].color }, service: { name: service.name, duration_min: service.duration_min } }); };
+  mk(0, 10, 0, 0, 0, 0, 'confirmed'); mk(0, 11, 30, 1, 1, 3, 'booked'); mk(0, 14, 0, 2, 2, 1, 'booked');
+  mk(1, 9, 30, 3, 0, 4, 'booked'); mk(1, 13, 0, 4, 0, 2, 'confirmed'); mk(2, 15, 0, 5, 1, 3, 'booked');
+  mk(-1, 10, 0, 0, 0, 0, 'completed'); mk(-2, 12, 0, 1, 1, 3, 'completed'); mk(3, 16, 0, 2, 0, 0, 'booked');
+  return { salon, services, staff, staffServices, hours, customers, appts };
+}
+
+function makeDemoApi(D) {
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'd' + Math.random().toString(36).slice(2));
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  const nest = (a) => { a.customer = D.customers.find((c) => c.id === a.customer_id) || a.customer || null; a.staff = D.staff.find((s) => s.id === a.staff_id) || a.staff || null; a.service = D.services.find((s) => s.id === a.service_id) || a.service || null; return a; };
+  return {
+    enabled: true, raw: null, demo: true,
+    auth: { async currentUser() { return { id: 'demo', email: 'owner@demo' }; }, async profile() { return { role: 'owner', full_name: 'Demo Owner' }; }, async signOut() {}, onChange() { return () => {}; } },
+    salons: { async mine() { return [clone(D.salon)]; }, async update(id, patch) { Object.assign(D.salon, patch); return clone(D.salon); } },
+    services: { async list() { return clone(D.services); }, async create(s, r) { const row = { id: uid(), salon_id: D.salon.id, ...r }; D.services.push(row); return clone(row); }, async update(id, p) { const r = D.services.find((x) => x.id === id); Object.assign(r, p); return clone(r); }, async remove(id) { D.services = D.services.filter((x) => x.id !== id); } },
+    staff: { async list() { return clone(D.staff); }, async create(s, r) { const row = { id: uid(), salon_id: D.salon.id, ...r }; D.staff.push(row); D.staffServices[row.id] = []; return clone(row); }, async update(id, p) { const r = D.staff.find((x) => x.id === id); Object.assign(r, p); return clone(r); }, async remove(id) { D.staff = D.staff.filter((x) => x.id !== id); }, async setServices(id, ids) { D.staffServices[id] = ids.slice(); }, async getServiceIds(id) { return (D.staffServices[id] || []).slice(); } },
+    hours: { async list() { return clone(D.hours); }, async setForStaff(s, staffId, rows) { D.hours = D.hours.filter((h) => h.staff_id !== staffId); rows.forEach((r) => D.hours.push({ id: uid(), salon_id: D.salon.id, staff_id: staffId, ...r })); } },
+    customers: { async list(s, { search } = {}) { let l = clone(D.customers); if (search) { const q = search.toLowerCase(); l = l.filter((c) => (c.name || '').toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q) || (c.phone || '').includes(search)); } return l; }, async create(s, r) { const row = { id: uid(), salon_id: D.salon.id, ...r }; D.customers.push(row); return clone(row); }, async update(id, p) { const r = D.customers.find((x) => x.id === id); Object.assign(r, p); return clone(r); }, async remove(id) { D.customers = D.customers.filter((x) => x.id !== id); } },
+    appointments: {
+      async range(s, fromISO, toISO) { const f = new Date(fromISO), t = new Date(toISO); return clone(D.appts.filter((a) => { const d = new Date(a.starts_at); return d >= f && d < t; }).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at))); },
+      async create(s, a) { const row = nest({ id: uid(), salon_id: D.salon.id, ...a }); D.appts.push(row); return clone(row); },
+      async update(id, p) { const r = D.appts.find((x) => x.id === id); Object.assign(r, p); nest(r); return clone(r); },
+      async setStatus(id, status) { const r = D.appts.find((x) => x.id === id); r.status = status; return clone(r); },
+      async remove(id) { D.appts = D.appts.filter((x) => x.id !== id); },
+    },
+  };
+}
+
+function startDemo() {
+  API = makeDemoApi(buildDemoData());
+  state.demo = true;
+  state.salon = null;
+  API.salons.mine().then((mine) => {
+    state.salon = mine[0];
+    wireAppShell();
+    $('#signout').onclick = () => { location.href = '/app'; };
+    const link = $('#view-storefront'); link.removeAttribute('href'); link.removeAttribute('target');
+    link.onclick = (e) => { e.preventDefault(); toast('Sign up to get your own booking page'); };
+    const app = $('#screen-app');
+    if (!app.querySelector('.demo-bar')) {
+      app.prepend(el('div', { class: 'demo-bar', style: 'grid-column:1/-1;border-radius:0;margin:0' },
+        el('span', {}, '🎬 Live demo — click around freely; changes reset on refresh.'),
+        el('a', { href: '/app', class: 'btn sm' }, 'Sign up free')));
+    }
+    show('#screen-app');
+    navigate('calendar');
+  });
 }
 
 // ---- employee profile -----------------------------------------------------
