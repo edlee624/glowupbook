@@ -1169,3 +1169,9 @@ begin
   if not found then raise exception 'Booking not found or cannot be confirmed.'; end if;
 end; $$;
 grant execute on function public.confirm_my_appointment(uuid) to authenticated;
+
+-- ===== 0011_reminded_at.sql =====
+-- ============================================================================
+-- Glowup Book — track when a reminder email was sent (dedupe reminders).
+-- ============================================================================
+alter table public.appointments add column if not exists reminded_at timestamptz;
