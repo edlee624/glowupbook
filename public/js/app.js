@@ -1039,13 +1039,24 @@ async function renderMap(container, salons) {
   setTimeout(() => _map.invalidateSize(), 50);   // container just became visible
   _markers.clearLayers();
   const pts = [];
+  const MARKER_COLOR = { hair: '#6C4AB6', barber: '#2BB6A3', nails: '#FF6FA5', beauty: '#F5A524' };
+  let missing = 0;
   salons.forEach((s) => {
-    if (s.lat == null || s.lon == null) return;
-    const m = L.marker([s.lat, s.lon]).bindPopup(
+    if (s.lat == null || s.lon == null) { missing++; return; }
+    // Vector circle marker — always renders (no image path), bold & colored by type.
+    const m = L.circleMarker([s.lat, s.lon], {
+      radius: 11, color: '#fff', weight: 3, fillColor: MARKER_COLOR[s.business_type] || '#6C4AB6', fillOpacity: 1,
+    }).bindPopup(
       `<a href="/${s.slug}">${s.name}</a><br><span style="color:#8B8898;font-size:12px">${TYPE_LABELS[s.business_type] || ''}${s.city ? ' · ' + s.city : ''}</span>`);
     _markers.addLayer(m); pts.push([s.lat, s.lon]);
   });
-  if (pts.length) _map.fitBounds(pts, { padding: [40, 40], maxZoom: 15 });
+  if (pts.length) _map.fitBounds(pts, { padding: [50, 50], maxZoom: 15 });
+  else _map.setView([40.7128, -74.006], 11);
+  // If results have no coordinates, tell the user rather than showing a blank map.
+  const note = container.parentElement?.querySelector('.map-note');
+  if (!pts.length && missing) {
+    if (!note) container.insertAdjacentHTML('afterend', `<div class="map-note banner" style="margin-top:10px">These salons don't have map locations yet. Try the <b>List</b> view.</div>`);
+  } else if (note) { note.remove(); }
 }
 
 // Directory header auth area: customer log in / sign up, or account + bookings.
