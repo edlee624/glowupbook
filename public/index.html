@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Glowup Book — booking & CRM for salons</title>
-<meta name="description" content="Glowup Book is the booking system and CRM for salons, barbers, hairdressers and nail studios — manage appointments and customers, and take bookings online.">
+<title>Glowup Book — Find & book beauty, hair & nail salons</title>
+<meta name="description" content="Browse and book beauty, hair, barber and nail salons near you — and the all-in-one booking + CRM tool that salons use to run their business.">
 <meta name="theme-color" content="#1d1b2e">
 <link rel="icon" href="/logo.png">
 <link rel="apple-touch-icon" href="/logo.png">
@@ -225,6 +225,34 @@
   .salon-card .meta{color:var(--grey);font-size:13px;}
   .salon-card .type-pill{display:inline-block;margin-top:10px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--paper-dim);color:var(--ink);}
   .dir-foot{display:flex;align-items:center;justify-content:space-between;max-width:1100px;margin:0 auto;padding:20px 24px 40px;border-top:1px solid var(--line);}
+  /* ---- launch / marketing sections ---- */
+  .lp-inner{max-width:1080px;margin:0 auto;padding:0 24px;}
+  .lp-h2{font-size:30px;margin-bottom:8px;}
+  .lp-how{padding:48px 0 10px;}
+  .lp-how .lp-h2{text-align:center;margin-bottom:28px;}
+  .lp-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:22px;}
+  .lp-step{text-align:center;padding:6px;}
+  .lp-num{width:44px;height:44px;border-radius:50%;background:var(--paper-dim);color:var(--plum);font-weight:800;font-size:19px;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-family:'Fraunces',serif;}
+  .lp-step h3{font-size:18px;margin-bottom:6px;}
+  .lp-step p{color:var(--grey);font-size:14px;margin:0;}
+  .lp-owners{margin:54px 0 0;padding:44px 0;background:linear-gradient(135deg,var(--plum),var(--pink));color:#fff;}
+  .lp-owners-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:36px;align-items:center;}
+  .lp-eyebrow{display:inline-block;text-transform:uppercase;letter-spacing:.08em;font-size:12px;font-weight:700;opacity:.85;margin-bottom:8px;}
+  .lp-benefits{list-style:none;padding:0;margin:16px 0 22px;}
+  .lp-benefits li{padding:6px 0;font-size:15px;opacity:.96;}
+  .lp-cta{display:flex;gap:12px;flex-wrap:wrap;}
+  .lp-owners-card{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:18px;padding:22px;display:grid;gap:16px;}
+  .lp-stat{display:flex;flex-direction:column;}
+  .lp-stat strong{font-family:'Fraunces',serif;font-size:30px;line-height:1;}
+  .lp-stat span{opacity:.9;font-size:14px;margin-top:3px;}
+  .lp-foot{background:var(--ink);color:var(--paper);margin-top:0;padding:40px 0 24px;}
+  .lp-foot-grid{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:24px;}
+  .lp-foot .brand{color:#fff;}
+  .lp-foot-col h4{font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--grey);margin:0 0 10px;}
+  .lp-foot-col a{display:block;color:var(--paper);opacity:.85;text-decoration:none;font-size:14px;padding:4px 0;}
+  .lp-foot-col a:hover{opacity:1;}
+  .lp-foot-bottom{max-width:1080px;margin:26px auto 0;padding:16px 24px 0;border-top:1px solid var(--line-soft);font-size:13px;}
+  @media(max-width:760px){ .lp-owners-grid{grid-template-columns:1fr;} .lp-foot-grid{grid-template-columns:1fr 1fr;} }
   @media(max-width:560px){ .dir-hero h1{font-size:30px;} .dir-search{flex-direction:column;} }
 
   @media(max-width:760px){
@@ -347,9 +375,55 @@
     <div id="dir-map" class="dir-map hidden"></div>
     <div id="dir-grid" class="dir-grid"></div>
   </div>
-  <footer class="dir-foot">
-    <span class="muted">© Glowup Book</span>
-    <a href="/app">List your salon</a>
+  <!-- How it works -->
+  <section class="lp-how">
+    <div class="lp-inner">
+      <h2 class="lp-h2">Book your next appointment in 3 steps</h2>
+      <div class="lp-steps">
+        <div class="lp-step"><div class="lp-num">1</div><h3>Find a salon</h3><p>Search by name, neighborhood or type — or browse the map.</p></div>
+        <div class="lp-step"><div class="lp-num">2</div><h3>Book in seconds</h3><p>Pick a service, your specialist and a time. No phone call.</p></div>
+        <div class="lp-step"><div class="lp-num">3</div><h3>Get confirmed</h3><p>Instant confirmation email, plus a reminder before your visit.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- For salon owners -->
+  <section class="lp-owners">
+    <div class="lp-inner lp-owners-grid">
+      <div>
+        <span class="lp-eyebrow">For salon owners</span>
+        <h2 class="lp-h2" style="color:#fff">Run your whole salon in one place</h2>
+        <p style="opacity:.92;font-size:16px">Appointment calendar, customer records, staff & services — plus your own online booking page. Free to start.</p>
+        <ul class="lp-benefits">
+          <li>📅 Calendar (day/week/month) with online booking</li>
+          <li>👥 Customer history, staff schedules & services</li>
+          <li>🔗 Your own page at <strong>glowupbook.com/your-salon</strong></li>
+          <li>✉️ Automatic booking confirmations &amp; reminders</li>
+        </ul>
+        <div class="lp-cta">
+          <a href="/demo" class="btn" style="background:#fff;color:var(--plum)">▶ Try the live demo</a>
+          <a href="/app" class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.5)">List your salon free →</a>
+        </div>
+      </div>
+      <div class="lp-owners-card">
+        <div class="lp-stat"><strong>10,000+</strong><span>NYC salons already listed</span></div>
+        <div class="lp-stat"><strong>$0</strong><span>to get started</span></div>
+        <div class="lp-stat"><strong>2 min</strong><span>to set up your page</span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="lp-foot">
+    <div class="lp-inner lp-foot-grid">
+      <div>
+        <div class="brand" style="font-size:20px"><img src="/logo.png" class="brand-logo" alt=""> Glowup Book</div>
+        <p class="muted" style="font-size:13px;margin:10px 0 0;max-width:260px">Find &amp; book beauty, hair and nail salons — and the tools to run them.</p>
+      </div>
+      <div class="lp-foot-col"><h4>Customers</h4><a href="/">Browse salons</a><a id="foot-account" href="#">My account</a></div>
+      <div class="lp-foot-col"><h4>Salon owners</h4><a href="/app">List your salon</a><a href="/demo">See the demo</a><a href="/app">Owner login</a></div>
+      <div class="lp-foot-col"><h4>Company</h4><a href="mailto:hello@glowupbook.com">Contact</a><a href="/app">Employee login</a></div>
+    </div>
+    <div class="lp-foot-bottom"><span class="muted">© Glowup Book · glowupbook.com</span></div>
   </footer>
 </section>
 

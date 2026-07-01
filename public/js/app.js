@@ -927,6 +927,12 @@ const TYPE_LABELS = { hair: 'Hair salon', barber: 'Barber shop', nails: 'Nail st
 async function startDirectory() {
   show('#screen-directory');
   renderDirAuth();
+  const footAcct = $('#foot-account');
+  if (footAcct) footAcct.onclick = async (e) => {
+    e.preventDefault();
+    const u = API.enabled ? await API.auth.currentUser().catch(() => null) : null;
+    if (u) openCustomerProfile(); else openCustomerAuth(renderDirAuth);
+  };
   const grid = $('#dir-grid'), q = $('#dir-q'), type = $('#dir-type');
   const mapEl = $('#dir-map'), btnList = $('#view-list'), btnMap = $('#view-map');
   let t, view = 'list', lastResults = [];
