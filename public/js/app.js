@@ -804,9 +804,9 @@ async function openApptModal(day, refresh, existing) {
     if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     try {
       await API.appointments.requestConfirmation(existing.id);
-      await API.appointments.sendConfirmationEmail(existing.id);
+      await API.appointments.sendConfirmationEmail(existing.id, 'confirm-request');
       close(); refresh();
-      modalInfo('Request for confirmation sent', `A confirmation email has been sent to ${cust.name || 'the customer'} at ${cust.email}. They'll be asked to confirm they're coming.`);
+      modalInfo('Reminder to confirm sent', `A reminder to confirm has been emailed to ${cust.name || 'the customer'} at ${cust.email}. They'll be asked to confirm they're still coming.`);
     } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Request confirmation'; } errToast(e); }
   }
 
