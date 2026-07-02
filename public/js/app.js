@@ -850,12 +850,13 @@ function openCancelDialog(existing, refresh, closeParent) {
     const notes = existing.notes ? `${existing.notes}\n${note}` : note;
     try {
       await API.appointments.update(existing.id, { status: 'cancelled', notes });
-      close(); if (closeParent) closeParent(); refresh(); toast('Appointment cancelled');
-      // Offer to send the note to the customer via the owner's email app.
-      if (message.value.trim() && cust.email) {
-        const when = new Date(existing.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-        window.location.href = `mailto:${encodeURIComponent(cust.email)}?subject=${encodeURIComponent('Your appointment has been cancelled')}&body=${encodeURIComponent(`Hi ${cust.name || ''}, your appointment on ${when} has been cancelled.\n\n${message.value.trim()}\n\n— ${state.salon.name}`)}`;
+      // Email the customer a cancellation notice (with the optional message).
+      let emailed = false;
+      if (cust.email) {
+        try { await API.appointments.sendConfirmationEmail(existing.id, 'cancelled', { message: message.value.trim() }); emailed = true; } catch { /* non-fatal */ }
       }
+      close(); if (closeParent) closeParent(); refresh();
+      toast(emailed ? 'Appointment cancelled — customer emailed' : 'Appointment cancelled');
     } catch (e) { errToast(e); }
   }
 }

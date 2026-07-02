@@ -1,15 +1,14 @@
 // ============================================================================
 // Glowup Book — send-booking-email
 //
-// Sends the customer an email via Resend. Two modes:
-//   • "booking" (default)        — the confirmation sent when an appointment is
-//                                  created (fired by a DB webhook/trigger on INSERT).
-//   • "confirm-request"          — a "please confirm you're still coming" reminder,
-//                                  sent when the owner clicks "Request confirmation".
-// Both include the /confirm/<token> link.
+// Sends the customer an email via Resend. Modes:
+//   • "booking"          — confirmation when an appointment is created (DB trigger)
+//   • "confirm-request"  — "please confirm you're still coming" (owner button)
+//   • "cancelled"        — appointment cancellation notice (owner cancels)
 //
-// Body: { record: <appointment> }  (from the DB trigger)  OR
-//       { id: <uuid>, mode: "confirm-request" }  (from the dashboard button)
+// Body: { record: <appointment> }                         (DB trigger)  OR
+//       { id: <uuid>, mode: "confirm-request" }            (Request confirmation) OR
+//       { id: <uuid>, mode: "cancelled", message: "..." }  (Cancel appointment)
 //
 // Secrets: RESEND_API_KEY, EMAIL_FROM, SITE_URL (SUPABASE_URL + SERVICE key auto).
 // ============================================================================
@@ -26,13 +25,14 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const record = body.record ?? body;
     const apptId = record?.id;
-    const mode = body.mode ?? record?.mode ?? "booking";       // "booking" | "confirm-request"
+    const mode = body.mode ?? record?.mode ?? "booking";
+    const message = (body.message ?? "").toString().trim();
     if (!apptId) return new Response("no appointment id", { status: 200 });
 
     const supa = createClient(SUPABASE_URL, SERVICE_KEY);
     const { data: a } = await supa
       .from("appointments")
-      .select("id, starts_at, confirm_token, customer:customers(name,email), salon:salons(name,timezone), service:services(name)")
+      .select("id, starts_at, confirm_token, customer:customers(name,email), salon:salons(name,timezone,slug), service:services(name)")
       .eq("id", apptId).single();
     if (!a?.customer?.email) return new Response("no recipient", { status: 200 });
 
@@ -40,26 +40,41 @@ Deno.serve(async (req) => {
     const when = new Date(a.starts_at).toLocaleString("en-US", { timeZone: tz, dateStyle: "full", timeStyle: "short" });
     const confirmUrl = `${SITE_URL}/confirm/${a.confirm_token}`;
     const salonName = a.salon?.name ?? "the salon";
+    const rebookUrl = a.salon?.slug ? `${SITE_URL}/${a.salon.slug}` : SITE_URL;
     const name = a.customer?.name ?? "there";
     const service = a.service?.name ?? "Appointment";
-    const isReminder = mode === "confirm-request";
 
-    const subject = isReminder ? `Please confirm your appointment at ${salonName}` : `Your booking at ${salonName}`;
-    const heading = isReminder ? "Please confirm your appointment" : `You're booked at ${salonName} 🎉`;
-    const intro = isReminder
-      ? `Hi ${name}, ${salonName} would like to confirm you're still coming to your appointment:`
-      : `Hi ${name}, here are your appointment details:`;
-    const cta = isReminder ? "Yes, I'll be there" : "Confirm my appointment";
+    let subject: string, html: string;
+    const shell = (inner: string) =>
+      `<div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1d1b2e">${inner}<p style="color:#8B8898;font-size:12px">Sent via Glowup Book</p></div>`;
+    const btn = (href: string, label: string) =>
+      `<p><a href="${href}" style="background:#6C4AB6;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">${label}</a></p>`;
 
-    const html = `
-      <div style="font-family:Inter,Arial,sans-serif;max-width:520px;margin:0 auto;color:#1d1b2e">
-        <h2 style="font-family:Georgia,serif;color:#1d1b2e">${heading}</h2>
-        <p>${intro}</p>
+    if (mode === "cancelled") {
+      subject = `Your appointment at ${salonName} was cancelled`;
+      html = shell(`
+        <h2 style="font-family:Georgia,serif">Your appointment has been cancelled</h2>
+        <p>Hi ${name}, your appointment for <strong>${service}</strong> on ${when} at ${salonName} has been cancelled.</p>
+        ${message ? `<p style="background:#F0ECE6;border-radius:10px;padding:12px 14px;margin:14px 0">${message}</p>` : ""}
+        <p>You can rebook any time:</p>
+        ${btn(rebookUrl, "Book again")}`);
+    } else if (mode === "confirm-request") {
+      subject = `Please confirm your appointment at ${salonName}`;
+      html = shell(`
+        <h2 style="font-family:Georgia,serif">Please confirm your appointment</h2>
+        <p>Hi ${name}, ${salonName} would like to confirm you're still coming to your appointment:</p>
         <p style="font-size:16px"><strong>${service}</strong><br>${when}</p>
-        <p><a href="${confirmUrl}" style="background:#6C4AB6;color:#fff;padding:12px 22px;border-radius:10px;text-decoration:none;font-weight:600;display:inline-block">${cta}</a></p>
-        <p style="color:#8B8898;font-size:13px">${isReminder ? `Can't make it? Please contact ${salonName} to reschedule.` : `We'll send a reminder before your visit.`}</p>
-        <p style="color:#8B8898;font-size:12px">Booked via Glowup Book</p>
-      </div>`;
+        ${btn(confirmUrl, "Yes, I'll be there")}
+        <p style="color:#8B8898;font-size:13px">Can't make it? Please contact ${salonName} to reschedule.</p>`);
+    } else {
+      subject = `Your booking at ${salonName}`;
+      html = shell(`
+        <h2 style="font-family:Georgia,serif">You're booked at ${salonName} 🎉</h2>
+        <p>Hi ${name}, here are your appointment details:</p>
+        <p style="font-size:16px"><strong>${service}</strong><br>${when}</p>
+        ${btn(confirmUrl, "Confirm my appointment")}
+        <p style="color:#8B8898;font-size:13px">We'll send a reminder before your visit.</p>`);
+    }
 
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",

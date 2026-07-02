@@ -269,8 +269,8 @@ const appointments = {
   },
   // Send an email via the Edge Function. mode 'confirm-request' = "please confirm"
   // reminder (from the dashboard); 'booking' = the initial confirmation.
-  async sendConfirmationEmail(id, mode = 'confirm-request') {
-    const { data, error } = await client().functions.invoke('send-booking-email', { body: { id, mode } });
+  async sendConfirmationEmail(id, mode = 'confirm-request', extra = {}) {
+    const { data, error } = await client().functions.invoke('send-booking-email', { body: { id, mode, ...extra } });
     if (error) throw error;
     return data;
   },
