@@ -53,6 +53,24 @@ function showEmailConfirmNotice(container, email, opts = {}) {
     } }, 'Resend email')));
 }
 
+// "I agree to the Terms & Privacy Policy" checkbox. Returns the label node with
+// a `.checkbox` ref; call agreed(node) to validate.
+function consentCheckbox(prefix = 'I agree to the') {
+  const cb = el('input', { type: 'checkbox', style: 'width:auto;margin-top:2px' });
+  const node = el('label', { class: 'consent', style: 'display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:13px;margin:2px 0 12px;color:var(--grey)' },
+    cb, el('span', {}, `${prefix} `,
+      el('a', { href: '/terms', target: '_blank', rel: 'noopener' }, 'Terms'),
+      ' and ',
+      el('a', { href: '/privacy', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), '.'));
+  node.checkbox = cb;
+  return node;
+}
+function agreed(node) {
+  if (node?.checkbox?.checked) return true;
+  toast('Please agree to the Terms & Privacy Policy to continue', true);
+  return false;
+}
+
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const todayISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -469,11 +487,14 @@ async function startEmployee(prof) {
 // ---- auth screen ----------------------------------------------------------
 function wireAuthScreen() {
   let mode = 'login';
+  const consent = consentCheckbox();
+  $('#au-submit').before(consent);
   const setMode = (m) => {
     mode = m;
     $('#tab-login').classList.toggle('on', m === 'login');
     $('#tab-signup').classList.toggle('on', m === 'signup');
     $('#name-field').classList.toggle('hidden', m === 'login');
+    consent.classList.toggle('hidden', m === 'login');
     $('#au-submit').textContent = m === 'login' ? 'Log in' : 'Create account';
     $('#au-pass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
   };
@@ -484,6 +505,7 @@ function wireAuthScreen() {
     const email = $('#au-email').value.trim();
     const password = $('#au-pass').value;
     if (!email || !password) return toast('Enter email and password', true);
+    if (mode === 'signup' && !agreed(consent)) return;
     try {
       if (mode === 'signup') {
         const res = await API.auth.signUp({ email, password, fullName: $('#au-name').value.trim() });
@@ -1207,6 +1229,7 @@ function openCustomerAuth(onDone) {
   const submitBtn = el('button', { class: 'btn block', onclick: submit }, 'Log in');
   const tabLogin = el('button', { class: 'on' }, 'Log in');
   const tabSignup = el('button', {}, 'Sign up');
+  const consent = consentCheckbox();
   // role chooser (signup only): customer vs employee
   const roleCust = el('button', { class: 'on' }, "I'm a customer");
   const roleEmp = el('button', {}, "I'm an employee");
@@ -1214,7 +1237,7 @@ function openCustomerAuth(onDone) {
   const blurb = el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Create a free account to book and manage your appointments at any salon.');
   const wrap = el('div', {}, blurb, el('div', { class: 'tabs' }, tabLogin, tabSignup), roleRow, nameField,
     field('Email', f.email = el('input', { type: 'email', autocomplete: 'email' })),
-    field('Password', f.pass = el('input', { type: 'password' })), submitBtn);
+    field('Password', f.pass = el('input', { type: 'password' })), consent, submitBtn);
   const setRole = (r) => { role = r; roleCust.classList.toggle('on', r === 'customer'); roleEmp.classList.toggle('on', r === 'staff');
     blurb.textContent = r === 'staff' ? 'Create your employee account, then ask your salon admin to add you by your email.' : 'Create a free account to book and manage your appointments at any salon.'; };
   roleCust.onclick = () => setRole('customer'); roleEmp.onclick = () => setRole('staff');
@@ -1223,6 +1246,7 @@ function openCustomerAuth(onDone) {
     tabLogin.classList.toggle('on', m === 'login'); tabSignup.classList.toggle('on', m === 'signup');
     roleRow.classList.toggle('hidden', m === 'login');
     nameField.classList.toggle('hidden', m === 'login');
+    consent.classList.toggle('hidden', m === 'login');
     submitBtn.textContent = m === 'login' ? 'Log in' : 'Create account';
   };
   tabLogin.onclick = () => setMode('login'); tabSignup.onclick = () => setMode('signup');
@@ -1231,6 +1255,7 @@ function openCustomerAuth(onDone) {
   async function submit() {
     const email = f.email.value.trim(), password = f.pass.value;
     if (!email || !password) return toast('Enter email and password', true);
+    if (mode === 'signup' && !agreed(consent)) return;
     try {
       if (mode === 'signup') {
         const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role });
@@ -1558,6 +1583,7 @@ async function startStorefront(sl) {
       field('Email', f.email = el('input', { type: 'email', autocomplete: 'email' })),
       field('Phone', f.phone = el('input', { autocomplete: 'tel' })),
       field('Notes (optional)', f.notes = el('textarea', { rows: 2 })),
+      f.consent = consentCheckbox('By booking, you agree to the'),
       el('button', { class: 'btn block', onclick: confirmBooking }, 'Confirm booking')));
     // Prefill for a logged-in customer so they don't retype their details.
     if (API.enabled) (async () => {
@@ -1570,6 +1596,7 @@ async function startStorefront(sl) {
     })();
     async function confirmBooking() {
       if (!f.name.value.trim()) return toast('Please enter your name', true);
+      if (!agreed(f.consent)) return;
       try {
         await API.storefront.book({
           slug: sl, serviceId: sf.service.id, staffId: sf.staff?.id || sf.slot.staff_id,
