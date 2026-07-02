@@ -586,7 +586,34 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
 const startOfWeek = (d) => addDays(startOfDay(d), -startOfDay(d).getDay());   // Sunday
 const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 
+// New-salon activation checklist — shows on the dashboard until the salon has
+// services, staff, and is published. Guides owners to their first online booking.
+async function renderGettingStarted(root) {
+  if (state.demo || !state.salon) return;
+  let services = [], staff = [];
+  try { [services, staff] = await Promise.all([API.services.list(state.salon.id), API.staff.list(state.salon.id)]); }
+  catch { return; }
+  const steps = [
+    { done: services.length > 0, label: 'Add your services', hint: 'What clients book — with price & duration', page: 'services' },
+    { done: staff.length > 0, label: 'Add staff & working hours', hint: 'Who takes appointments, and when', page: 'staff' },
+    { done: !!state.salon.is_published, label: 'Publish your booking page', hint: 'Go live so clients can book online', page: 'settings' },
+  ];
+  if (steps.every((s) => s.done)) return;   // fully set up — hide the checklist
+  const doneCount = steps.filter((s) => s.done).length;
+  const card = el('div', { class: 'card gs-card' },
+    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px' },
+      el('h3', { style: 'margin:0' }, '🚀 Get your salon ready'),
+      el('span', { class: 'muted', style: 'font-size:13px' }, `${doneCount} of ${steps.length} done`)),
+    el('p', { class: 'muted', style: 'font-size:13px;margin:6px 0 12px' }, 'Finish these to start taking online bookings:'),
+    ...steps.map((s) => el('button', { class: 'gs-step' + (s.done ? ' done' : ''), onclick: () => navigate(s.page) },
+      el('span', { class: 'gs-check' }, s.done ? '✓' : ''),
+      el('span', { style: 'flex:1;text-align:left' }, el('strong', {}, s.label), el('div', { class: 'muted', style: 'font-size:12px' }, s.hint)),
+      el('span', { class: 'gs-arrow' }, s.done ? '' : '→'))));
+  root.append(card);
+}
+
 PAGES.calendar = async (root) => {
+  await renderGettingStarted(root);
   const st = { view: 'week', anchor: new Date() };
   const head = el('div', { class: 'page-head' });
   const body = el('div');

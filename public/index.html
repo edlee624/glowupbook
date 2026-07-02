@@ -197,6 +197,14 @@
   #screen-employee{display:none;} #screen-employee.active{display:block;}
   .admin-wrap{max-width:1100px;margin:0 auto;padding:18px 24px 60px;}
   .stars{color:var(--amber);letter-spacing:2px;}
+  .gs-card{margin-bottom:20px;border:1px solid var(--plum);background:linear-gradient(180deg,rgba(108,74,182,.06),transparent);}
+  .gs-step{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:11px 14px;margin-bottom:8px;cursor:pointer;font-family:inherit;font-size:14px;color:var(--ink);}
+  .gs-step:last-child{margin-bottom:0;}
+  .gs-step:hover{border-color:var(--plum);}
+  .gs-step .gs-check{width:24px;height:24px;flex:none;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;font-size:13px;}
+  .gs-step.done .gs-check{background:var(--mint);border-color:var(--mint);}
+  .gs-step.done strong{text-decoration:line-through;color:var(--grey);}
+  .gs-step .gs-arrow{color:var(--plum);font-weight:700;}
   .demo-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:linear-gradient(135deg,var(--plum),var(--pink));color:#fff;padding:10px 16px;border-radius:12px;margin-bottom:18px;font-size:14px;font-weight:500;}
   .demo-bar .btn{background:#fff;color:var(--plum);}
   .portfolio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
