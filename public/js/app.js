@@ -388,6 +388,8 @@ function makeDemoApi(D) {
       async update(id, p) { const r = D.appts.find((x) => x.id === id); Object.assign(r, p); nest(r); return clone(r); },
       async setStatus(id, status) { const r = D.appts.find((x) => x.id === id); r.status = status; return clone(r); },
       async remove(id) { D.appts = D.appts.filter((x) => x.id !== id); },
+      async requestConfirmation(id) { const r = D.appts.find((x) => x.id === id); if (r) r.confirmation_requested_at = new Date().toISOString(); return clone(r); },
+      async sendConfirmationEmail() { return { ok: true }; },
     },
   };
 }
@@ -751,11 +753,21 @@ async function openApptModal(day, refresh, existing) {
   const dateVal = todayISO(start);
   const timeVal = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
 
-  wrap.append(
-    field('Customer', f.customer = el('select', {},
+  // Customer: read-only (with contact details) when editing; a picker when new.
+  if (existing) {
+    const c = existing.customer || {};
+    wrap.append(el('div', { class: 'field' }, el('label', {}, 'Customer'),
+      el('div', { class: 'ro-box' },
+        el('strong', {}, c.name || 'Walk-in / none'),
+        (c.email || c.phone)
+          ? el('div', { class: 'muted', style: 'font-size:13px;margin-top:3px' }, [c.email, c.phone].filter(Boolean).join(' · '))
+          : el('div', { class: 'muted', style: 'font-size:13px;margin-top:3px' }, 'No contact details on file'))));
+  } else {
+    wrap.append(field('Customer', f.customer = el('select', {},
       el('option', { value: '' }, '— Walk-in / none —'),
-      custs.map((c) => el('option', { value: c.id, ...(existing?.customer_id === c.id ? { selected: true } : {}) }, c.name)))),
-    field('Or new customer name', f.newName = el('input', { placeholder: 'Leave blank to use selection' })),
+      custs.map((c) => el('option', { value: c.id }, c.name)))));
+  }
+  wrap.append(
     field('Service', f.service = el('select', {}, svcs.map((s) =>
       el('option', { value: s.id, 'data-dur': s.duration_min, 'data-price': s.price, ...(existing?.service_id === s.id ? { selected: true } : {}) }, `${s.name} (${s.duration_min}m)`)))),
     field('Staff', f.staff = el('select', {}, el('option', { value: '' }, '— Unassigned —'),
@@ -777,10 +789,7 @@ async function openApptModal(day, refresh, existing) {
   }
 
   const actions = el('div', { class: 'row', style: 'margin-top:8px' });
-  if (existing) actions.append(el('button', { class: 'btn danger', onclick: async () => {
-    if (!confirm('Delete this appointment?')) return;
-    try { await API.appointments.remove(existing.id); close(); refresh(); toast('Deleted'); } catch (e) { errToast(e); }
-  } }, 'Delete'));
+  if (existing && existing.status !== 'cancelled') actions.append(el('button', { class: 'btn danger', onclick: () => openCancelDialog(existing, refresh, close) }, 'Cancel appointment'));
   if (existing && !['confirmed', 'cancelled', 'completed'].includes(existing.status)) {
     actions.append(el('button', { class: 'btn ghost', onclick: requestConfirm }, 'Request confirmation'));
   }
@@ -789,17 +798,16 @@ async function openApptModal(day, refresh, existing) {
   const close = modal(existing ? 'Edit appointment' : 'New appointment', wrap);
 
   async function requestConfirm() {
+    const cust = existing.customer || {};
+    if (!cust.email) return toast('This customer has no email on file to send a confirmation to.', true);
+    const btn = wrap.querySelector('.btn.ghost');
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
     try {
-      const row = await API.appointments.requestConfirmation(existing.id);
-      const link = `${location.origin}/confirm/${row.confirm_token}`;
-      const when = new Date(existing.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
-      const cust = existing.customer || {};
-      const msg = `Hi ${cust.name || ''}, please confirm your appointment at ${state.salon.name} on ${when}. Tap to confirm: ${link}`;
-      if (cust.email) window.location.href = `mailto:${encodeURIComponent(cust.email)}?subject=${encodeURIComponent('Please confirm your appointment')}&body=${encodeURIComponent(msg)}`;
-      else if (cust.phone) window.location.href = `sms:${(cust.phone || '').replace(/[^0-9+]/g, '')}?&body=${encodeURIComponent(msg)}`;
-      else { try { await navigator.clipboard.writeText(link); } catch { /* */ } toast('No email/phone on file — confirm link copied'); }
+      await API.appointments.requestConfirmation(existing.id);
+      await API.appointments.sendConfirmationEmail(existing.id);
       close(); refresh();
-    } catch (e) { errToast(e); }
+      modalInfo('Request for confirmation sent', `A confirmation email has been sent to ${cust.name || 'the customer'} at ${cust.email}. They'll be asked to confirm they're coming.`);
+    } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Request confirmation'; } errToast(e); }
   }
 
   async function save() {
@@ -808,21 +816,55 @@ async function openApptModal(day, refresh, existing) {
       const dur = parseInt(opt?.dataset.dur || '30', 10);
       const starts = new Date(`${f.date.value}T${f.time.value}`);
       const ends = new Date(starts.getTime() + dur * 60000);
-      let customerId = f.customer.value || null;
-      if (f.newName.value.trim()) {
-        const c = await API.customers.create(state.salon.id, { name: f.newName.value.trim() });
-        customerId = c.id;
-      }
       const payload = {
-        customer_id: customerId, staff_id: f.staff.value || null, service_id: f.service.value || null,
+        staff_id: f.staff.value || null, service_id: f.service.value || null,
         starts_at: starts.toISOString(), ends_at: ends.toISOString(),
         price: parseFloat(opt?.dataset.price || '0'), notes: f.notes.value.trim() || null,
       };
       if (existing) { payload.status = f.status.value; await API.appointments.update(existing.id, payload); }
-      else { payload.source = 'manual'; await API.appointments.create(state.salon.id, payload); }
+      else { payload.customer_id = f.customer.value || null; payload.source = 'manual'; await API.appointments.create(state.salon.id, payload); }
       close(); refresh(); toast('Saved');
     } catch (e) { errToast(e); }
   }
+}
+
+// Cancellation dialog: reason (radios) + optional message to the customer.
+function openCancelDialog(existing, refresh, closeParent) {
+  const cust = existing.customer || {};
+  const reasons = ['Customer requested', 'Customer rescheduled', 'No-show', 'Staff/salon unavailable', 'Other'];
+  let reason = reasons[0];
+  const radios = el('div', { style: 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px' },
+    ...reasons.map((r) => el('label', { style: 'display:flex;align-items:center;gap:8px;font-weight:400;font-size:14px;cursor:pointer' },
+      el('input', { type: 'radio', name: 'cxl-reason', value: r, style: 'width:auto', ...(r === reason ? { checked: true } : {}), onchange: () => (reason = r) }), r)));
+  const message = el('textarea', { rows: 3, placeholder: `Optional note to ${cust.name || 'the customer'} (e.g. sorry for the inconvenience)…` });
+  const wrap = el('div', {},
+    el('p', { class: 'muted', style: 'margin-top:0;font-size:13px' }, `Cancelling ${cust.name || 'this appointment'}${cust.email ? ' · ' + cust.email : ''}.`),
+    field('Reason', radios),
+    field('Message to customer', message),
+    el('div', { class: 'row', style: 'margin-top:6px' },
+      el('button', { class: 'btn ghost', onclick: () => close() }, 'Keep appointment'),
+      el('button', { class: 'btn danger', onclick: confirmCancel }, 'Cancel appointment')));
+  const close = modal('Cancel appointment', wrap);
+  async function confirmCancel() {
+    const note = `Cancelled — ${reason}.${message.value.trim() ? ' ' + message.value.trim() : ''}`;
+    const notes = existing.notes ? `${existing.notes}\n${note}` : note;
+    try {
+      await API.appointments.update(existing.id, { status: 'cancelled', notes });
+      close(); if (closeParent) closeParent(); refresh(); toast('Appointment cancelled');
+      // Offer to send the note to the customer via the owner's email app.
+      if (message.value.trim() && cust.email) {
+        const when = new Date(existing.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+        window.location.href = `mailto:${encodeURIComponent(cust.email)}?subject=${encodeURIComponent('Your appointment has been cancelled')}&body=${encodeURIComponent(`Hi ${cust.name || ''}, your appointment on ${when} has been cancelled.\n\n${message.value.trim()}\n\n— ${state.salon.name}`)}`;
+      }
+    } catch (e) { errToast(e); }
+  }
+}
+
+// Simple info dialog with an OK button.
+function modalInfo(title, message) {
+  const wrap = el('div', {}, el('p', { style: 'margin-top:0' }, message),
+    el('button', { class: 'btn block', style: 'margin-top:6px', onclick: () => close() }, 'OK'));
+  const close = modal(title, wrap);
 }
 function field(label, node) { return el('div', { class: 'field' }, el('label', {}, label), node); }
 

@@ -267,6 +267,12 @@ const appointments = {
     return unwrap(await client().from('appointments')
       .update({ confirmation_requested_at: new Date().toISOString() }).eq('id', id).select().single());
   },
+  // Actually send (or re-send) the confirmation email via the Edge Function.
+  async sendConfirmationEmail(id) {
+    const { data, error } = await client().functions.invoke('send-booking-email', { body: { id } });
+    if (error) throw error;
+    return data;
+  },
   async remove(id) {
     const { error } = await client().from('appointments').delete().eq('id', id);
     if (error) throw error;
