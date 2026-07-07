@@ -98,17 +98,12 @@ const salons = {
     return data || [];
   },
   async create({ name, slug, businessType, timezone, currency }) {
-    const user = await auth.currentUser();
-    const row = {
-      owner_id: user.id,
-      name,
-      slug,
-      business_type: businessType || null,
-      timezone: timezone || 'UTC',
-      currency: currency || 'USD',
-    };
-    const data = unwrap(await client().from('salons').insert(row).select().single());
-    return data;
+    // Uses a SECURITY DEFINER RPC (create_salon) that sets owner_id = auth.uid()
+    // server-side — robust against RLS/PostgREST insert quirks.
+    return unwrap(await client().rpc('create_salon', {
+      p_name: name, p_slug: slug, p_business_type: businessType || null,
+      p_timezone: timezone || 'UTC', p_currency: currency || 'USD',
+    }));
   },
   async update(id, patch) {
     return unwrap(await client().from('salons').update(patch).eq('id', id).select().single());
