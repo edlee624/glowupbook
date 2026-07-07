@@ -1,4 +1,4 @@
--- Glowup Book - combined migrations. Run in order in the Supabase SQL Editor.
+-- Glowup Book - full schema (run once on a fresh Supabase project). Migrations 0001-0011 in order.
 
 -- ===== 0001_init.sql =====
 -- ============================================================================
@@ -895,7 +895,10 @@ create policy "reviews: own write"  on public.reviews for all
   using (account_id = auth.uid()) with check (account_id = auth.uid());
 
 -- Re-define my_appointments to also return salon_id (needed to leave a review).
-create or replace function public.my_appointments()
+-- Drop first: 0003 defined it with different return columns, and Postgres won't
+-- let CREATE OR REPLACE change the output columns.
+drop function if exists public.my_appointments();
+create function public.my_appointments()
 returns table (
   id uuid, salon_id uuid, salon_name text, salon_slug text, service_name text, staff_name text,
   starts_at timestamptz, ends_at timestamptz, status appointment_status, price numeric
