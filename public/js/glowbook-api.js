@@ -86,7 +86,7 @@ const auth = {
   },
   onChange(cb) {
     if (!supabase) return () => {};
-    const { data } = supabase.auth.onAuthStateChange((_e, session) => cb(session?.user || null));
+    const { data } = supabase.auth.onAuthStateChange((event, session) => cb(session?.user || null, event));
     return () => data?.subscription?.unsubscribe?.();
   },
 };

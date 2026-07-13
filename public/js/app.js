@@ -79,8 +79,32 @@ function agreed(node) {
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const todayISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const fmtTime = (iso, tz) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: tz });
-const fmtDate = (iso, tz) => new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz });
+// Is `tz` a usable IANA timezone? (guards against free-text like "New York")
+function validTz(tz) {
+  if (!tz) return false;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
+}
+// Timezone falls back to browser-local if the salon's stored value is invalid,
+// so a bad tz string can never blank the calendar or the booking page.
+const okTz = (tz) => (validTz(tz) ? tz : undefined);
+const fmtTime = (iso, tz) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', timeZone: okTz(tz) });
+const fmtDate = (iso, tz) => new Date(iso).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric', timeZone: okTz(tz) });
+
+// Wall-clock parts (y/m/d/hour/min) of an instant AS SEEN in timezone `tz`.
+// Used so the owner calendar places appointments by the salon's local time,
+// not the browser's. Falls back to browser-local for an invalid tz.
+function zonedParts(iso, tz) {
+  const d = new Date(iso);
+  if (!validTz(tz)) return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate(), hour: d.getHours(), minute: d.getMinutes() };
+  const p = {};
+  for (const f of new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(d)) {
+    if (f.type !== 'literal') p[f.type] = f.value;
+  }
+  let hour = parseInt(p.hour, 10); if (hour === 24) hour = 0;   // some engines emit '24' at midnight
+  return { year: +p.year, month: +p.month, day: +p.day, hour, minute: +p.minute };
+}
+// Does appointment `a` fall on calendar day `d` (a local-midnight Date) in tz?
+const apptOnDay = (a, d, tz) => { const p = zonedParts(a.starts_at, tz); return p.year === d.getFullYear() && p.month === d.getMonth() + 1 && p.day === d.getDate(); };
 
 // ===========================================================================
 // ROUTER
@@ -261,17 +285,24 @@ function startDashboardApp() {
   if (!API.enabled) $('#cfg-banner').classList.remove('hidden');
   wireAuthScreen();
 
+  // Track who the dashboard was built for. onAuthStateChange also fires for
+  // TOKEN_REFRESHED / USER_UPDATED / INITIAL_SESSION — re-running afterLogin on
+  // those would yank the owner back to Calendar (losing unsaved edits), so we
+  // only (re)build on an actual sign-in or account switch.
+  let activeUid = null;
   API.auth.onChange(async (user) => {
     state.user = user;
-    if (!user) { show('#screen-auth'); return; }
-    await afterLogin();
+    if (!user) { if (activeUid !== null) { activeUid = null; show('#screen-auth'); } return; }
+    if (user.id !== activeUid) { activeUid = user.id; await afterLogin(); }
   });
 
-  // initial check
+  // initial check (races INITIAL_SESSION above; the activeUid guard makes
+  // whichever runs first win, so the dashboard boots exactly once)
   (async () => {
     const user = API.enabled ? await API.auth.currentUser() : null;
     state.user = user;
-    if (user) await afterLogin(); else show('#screen-auth');
+    if (user) { if (user.id !== activeUid) { activeUid = user.id; await afterLogin(); } }
+    else if (activeUid === null) show('#screen-auth');
   })();
 }
 
@@ -559,6 +590,7 @@ function wireOnboarding() {
     e.preventDefault();
     if (!name.value.trim() || !slugIn.value) return toast('Name and link are required', true);
     if (RESERVED.has(slugIn.value.toLowerCase())) return toast('That link name is reserved — pick another', true);
+    if (tz.value.trim() && !validTz(tz.value.trim())) return toast('Enter a valid timezone, e.g. America/New_York', true);
     try {
       state.salon = await API.salons.create({
         name: name.value.trim(), slug: slugIn.value, businessType: $('#onb-type').value,
@@ -661,7 +693,10 @@ PAGES.calendar = async (root) => {
 
     const [from, to] = rangeFor();
     let appts = [];
-    try { appts = await API.appointments.range(state.salon.id, from.toISOString(), to.toISOString()); } catch (e) { errToast(e); }
+    // Fetch ±1 day beyond the visible range so appointments near midnight in the
+    // salon timezone (which can shift into the neighbouring day vs the browser)
+    // aren't dropped; precise filtering happens per-day below in the salon tz.
+    try { appts = await API.appointments.range(state.salon.id, addDays(from, -1).toISOString(), addDays(to, 1).toISOString()); } catch (e) { errToast(e); }
 
     body.innerHTML = '';
     if (st.view === 'month') body.append(renderMonth(from, appts));
@@ -669,6 +704,7 @@ PAGES.calendar = async (root) => {
   }
 
   function renderTimeGrid(days, from, appts) {
+    const tz = state.salon.timezone;
     const cols = `56px repeat(${days}, 1fr)`;
     const wrap = el('div', { class: 'cal-grid' });
     if (days > 1) {
@@ -676,13 +712,17 @@ PAGES.calendar = async (root) => {
       for (let i = 0; i < days; i++) { const d = addDays(from, i); hd.append(el('div', { style: sameDay(d, new Date()) ? 'color:var(--plum)' : '' }, d.toLocaleDateString([], { weekday: 'short', day: 'numeric' }))); }
       wrap.append(hd);
     }
+    // Effective grid row for an appointment: its salon-tz hour, clamped into the
+    // visible range so early-morning / late-night bookings still show (in the
+    // boundary row) instead of vanishing — the chip label shows the true time.
+    const rowHour = (a) => Math.min(CAL_H1 - 1, Math.max(CAL_H0, zonedParts(a.starts_at, tz).hour));
     for (let h = CAL_H0; h < CAL_H1; h++) {
       const row = el('div', { class: 'cal-row', style: `grid-template-columns:${cols}` },
         el('div', { class: 'cal-timecol' }, `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`));
       for (let i = 0; i < days; i++) {
         const d = addDays(from, i);
         const cell = el('div', { class: 'cal-cell' });
-        appts.filter((a) => { const s = new Date(a.starts_at); return sameDay(s, d) && s.getHours() === h; })
+        appts.filter((a) => apptOnDay(a, d, tz) && rowHour(a) === h)
           .forEach((a) => cell.append(calChip(a, render, days > 1)));
         row.append(cell);
       }
@@ -692,11 +732,12 @@ PAGES.calendar = async (root) => {
   }
 
   function renderMonth(gridStart, appts) {
+    const tz = state.salon.timezone;
     const wrap = el('div', { class: 'cal-month' });
     ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d) => wrap.append(el('div', { class: 'cal-mcell', style: 'min-height:auto;background:var(--paper-dim);font-weight:600;font-size:12px;text-align:center;cursor:default' }, d)));
     for (let i = 0; i < 42; i++) {
       const d = addDays(gridStart, i);
-      const dayAppts = appts.filter((a) => sameDay(new Date(a.starts_at), d)).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      const dayAppts = appts.filter((a) => apptOnDay(a, d, tz)).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
       const other = d.getMonth() !== st.anchor.getMonth();
       const cell = el('div', { class: 'cal-mcell' + (other ? ' other' : '') + (sameDay(d, new Date()) ? ' today' : ''), onclick: () => { st.view = 'day'; st.anchor = d; render(); } },
         el('div', { class: 'dnum' }, String(d.getDate())));
@@ -1113,6 +1154,7 @@ PAGES.settings = async (root) => {
   );
   root.append(card);
   async function save() {
+    if (f.tz.value.trim() && !validTz(f.tz.value.trim())) return toast('Enter a valid timezone, e.g. America/New_York', true);
     try {
       state.salon = await API.salons.update(s.id, {
         name: f.name.value.trim(), about: f.about.value.trim() || null, phone: f.phone.value.trim() || null,
