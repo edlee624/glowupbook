@@ -20,6 +20,13 @@ const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SITE_URL = Deno.env.get("SITE_URL") ?? "https://glowupbook.com";
 const FROM = Deno.env.get("EMAIL_FROM") ?? "Glowup Book <bookings@glowupbook.com>";
 
+// Escape strings before interpolating into the HTML email so attacker-chosen
+// values (customer name at booking, cancellation message, salon/service names)
+// cannot inject markup into a message sent from our verified sending domain.
+const esc = (s: unknown) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
 Deno.serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
@@ -27,22 +34,25 @@ Deno.serve(async (req) => {
     const apptId = record?.id;
     const mode = body.mode ?? record?.mode ?? "booking";
     const message = (body.message ?? "").toString().trim();
-    if (!apptId) return new Response("no appointment id", { status: 200 });
+    if (!apptId) return new Response("no appointment id", { status: 400 });
 
     const supa = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { data: a } = await supa
+    const { data: a, error: fetchErr } = await supa
       .from("appointments")
       .select("id, starts_at, confirm_token, customer:customers(name,email), salon:salons(name,timezone,slug), service:services(name)")
       .eq("id", apptId).single();
-    if (!a?.customer?.email) return new Response("no recipient", { status: 200 });
+    if (fetchErr) return new Response(`lookup failed: ${fetchErr.message}`, { status: 500 });
+    if (!a) return new Response("appointment not found", { status: 404 });
+    if (!a?.customer?.email) return new Response("no recipient email on file", { status: 422 });
 
     const tz = a.salon?.timezone ?? "UTC";
-    const when = new Date(a.starts_at).toLocaleString("en-US", { timeZone: tz, dateStyle: "full", timeStyle: "short" });
-    const confirmUrl = `${SITE_URL}/confirm/${a.confirm_token}`;
-    const salonName = a.salon?.name ?? "the salon";
-    const rebookUrl = a.salon?.slug ? `${SITE_URL}/${a.salon.slug}` : SITE_URL;
-    const name = a.customer?.name ?? "there";
-    const service = a.service?.name ?? "Appointment";
+    const when = esc(new Date(a.starts_at).toLocaleString("en-US", { timeZone: tz, dateStyle: "full", timeStyle: "short" }));
+    const confirmUrl = `${SITE_URL}/confirm/${encodeURIComponent(a.confirm_token)}`;
+    const salonName = esc(a.salon?.name ?? "the salon");
+    const rebookUrl = a.salon?.slug ? `${SITE_URL}/${encodeURIComponent(a.salon.slug)}` : SITE_URL;
+    const name = esc(a.customer?.name ?? "there");
+    const service = esc(a.service?.name ?? "Appointment");
+    const safeMessage = esc(message);
 
     let subject: string, html: string;
     const shell = (inner: string) =>
@@ -55,7 +65,7 @@ Deno.serve(async (req) => {
       html = shell(`
         <h2 style="font-family:Georgia,serif">Your appointment has been cancelled</h2>
         <p>Hi ${name}, your appointment for <strong>${service}</strong> on ${when} at ${salonName} has been cancelled.</p>
-        ${message ? `<p style="background:#F0ECE6;border-radius:10px;padding:12px 14px;margin:14px 0">${message}</p>` : ""}
+        ${safeMessage ? `<p style="background:#F0ECE6;border-radius:10px;padding:12px 14px;margin:14px 0">${safeMessage}</p>` : ""}
         <p>You can rebook any time:</p>
         ${btn(rebookUrl, "Book again")}`);
     } else if (mode === "confirm-request") {

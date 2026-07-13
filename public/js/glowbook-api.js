@@ -28,6 +28,13 @@ function unwrap({ data, error }) {
   return data;
 }
 
+// Strip characters PostgREST treats as syntax inside .or()/filter strings, so a
+// user typing "Brooklyn, NY" or "Sam's (uptown)" can't break the query (comma /
+// parens) or inject extra filter clauses. RLS still bounds what any filter sees.
+function safeLike(s) {
+  return String(s ?? '').replace(/[,()*:\\]/g, ' ').trim();
+}
+
 // ---- Auth -----------------------------------------------------------------
 const auth = {
   // role: 'owner' (salon owner, signs up at /app) | 'customer' (signs up on the
@@ -132,7 +139,8 @@ const admin = {
     let q = client().from('salons')
       .select('id,name,slug,business_type,city,claimed,is_published,owner_id,created_at')
       .order('created_at', { ascending: false }).limit(limit);
-    if (search) q = q.or(`name.ilike.*${search}*,city.ilike.*${search}*,slug.ilike.*${search}*`);
+    const t = safeLike(search);
+    if (t) q = q.or(`name.ilike.*${t}*,city.ilike.*${t}*,slug.ilike.*${t}*`);
     return unwrap(await q) || [];
   },
   async setPublished(id, value) {
@@ -220,7 +228,8 @@ const hours = {
 const customers = {
   async list(salonId, { search } = {}) {
     let q = client().from('customers').select('*').eq('salon_id', salonId).order('name');
-    if (search) q = q.or(`name.ilike.*${search}*,email.ilike.*${search}*,phone.ilike.*${search}*`);
+    const t = safeLike(search);
+    if (t) q = q.or(`name.ilike.*${t}*,email.ilike.*${t}*,phone.ilike.*${t}*`);
     return unwrap(await q) || [];
   },
   async create(salonId, c) {
@@ -290,7 +299,8 @@ const storefront = {
       let q = client().from('salons').select(cols)
         .order('is_published', { ascending: false }).order('name').limit(60);
       if (type) q = q.eq('business_type', type);
-      if (search) q = q.or(`name.ilike.*${search}*,city.ilike.*${search}*`);
+      const t = safeLike(search);
+      if (t) q = q.or(`name.ilike.*${t}*,city.ilike.*${t}*`);
       return q;
     };
     let { data, error } = await build(2);

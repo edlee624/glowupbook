@@ -1178,3 +1178,87 @@ grant execute on function public.confirm_my_appointment(uuid) to authenticated;
 -- Glowup Book — track when a reminder email was sent (dedupe reminders).
 -- ============================================================================
 alter table public.appointments add column if not exists reminded_at timestamptz;
+
+-- ===== create_salon RPC =====
+-- ============================================================================
+-- Owner salon creation. Runs SECURITY DEFINER and stamps owner_id from the
+-- verified session, sidestepping a PostgREST/RLS quirk where a direct insert of
+-- owner_id failed. The client calls this instead of inserting into salons.
+-- ============================================================================
+create or replace function public.create_salon(
+  p_name text,
+  p_slug text,
+  p_business_type text default null,
+  p_timezone text default 'UTC',
+  p_currency text default 'USD'
+) returns public.salons
+language plpgsql security definer set search_path = public as $$
+declare v_row public.salons;
+begin
+  if auth.uid() is null then
+    raise exception 'You must be logged in to create a salon.';
+  end if;
+  insert into public.salons (owner_id, name, slug, business_type, timezone, currency, claimed, source)
+  values (auth.uid(), p_name, p_slug, p_business_type,
+          coalesce(p_timezone,'UTC'), coalesce(p_currency,'USD'), true, 'owner')
+  returning * into v_row;
+  return v_row;
+end; $$;
+grant execute on function public.create_salon(text, text, text, text, text) to authenticated;
+
+-- ===== 0012_security_hardening.sql =====
+-- ============================================================================
+-- Glowup Book — security hardening (see supabase/migrations/0012 for details).
+--   1. Block self-escalation of profiles.role (BEFORE UPDATE trigger).
+--   2. Never provision an 'admin' from client signup metadata.
+--   3. Reviews require a completed, owned appointment.
+-- ============================================================================
+create or replace function public.guard_profile_role()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.role is distinct from old.role and not public.is_admin() then
+    new.role := old.role;
+  end if;
+  return new;
+end; $$;
+drop trigger if exists profiles_guard_role on public.profiles;
+create trigger profiles_guard_role
+  before update on public.profiles
+  for each row execute function public.guard_profile_role();
+
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare v_role user_role;
+begin
+  begin
+    v_role := coalesce(nullif(new.raw_user_meta_data->>'role','')::user_role, 'owner');
+  exception when others then
+    v_role := 'owner';
+  end;
+  if v_role = 'admin' then
+    v_role := 'owner';
+  end if;
+  insert into public.profiles (id, email, full_name, role)
+  values (new.id, new.email, coalesce(new.raw_user_meta_data->>'full_name',''), v_role);
+  return new;
+end; $$;
+
+drop policy if exists "reviews: own write" on public.reviews;
+create policy "reviews: insert own completed" on public.reviews for insert
+  with check (
+    account_id = auth.uid()
+    and appointment_id is not null
+    and exists (
+      select 1
+      from public.appointments ap
+      join public.customers c on c.id = ap.customer_id
+      where ap.id = reviews.appointment_id
+        and ap.salon_id = reviews.salon_id
+        and c.account_id = auth.uid()
+        and ap.status = 'completed'
+    )
+  );
+create policy "reviews: update own" on public.reviews for update
+  using (account_id = auth.uid()) with check (account_id = auth.uid());
+create policy "reviews: delete own" on public.reviews for delete
+  using (account_id = auth.uid());

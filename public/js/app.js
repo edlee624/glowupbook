@@ -19,6 +19,11 @@ function el(tag, props = {}, ...kids) {
   for (const kid of kids.flat()) n.append(kid?.nodeType ? kid : document.createTextNode(kid ?? ''));
   return n;
 }
+// Escape a string for safe interpolation into an HTML sink (Leaflet popups etc.).
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
 function show(id) { $$('.screen').forEach((s) => s.classList.remove('active')); $(id).classList.add('active'); }
 let toastT;
 function toast(msg, bad = false) {
@@ -1259,7 +1264,7 @@ async function renderMap(container, salons) {
     const m = L.circleMarker([s.lat, s.lon], {
       radius: 11, color: '#fff', weight: 3, fillColor: MARKER_COLOR[s.business_type] || '#6C4AB6', fillOpacity: 1,
     }).bindPopup(
-      `<a href="/${s.slug}">${s.name}</a><br><span style="color:#8B8898;font-size:12px">${TYPE_LABELS[s.business_type] || ''}${s.city ? ' · ' + s.city : ''}</span>`);
+      `<a href="/${encodeURIComponent(s.slug)}">${esc(s.name)}</a><br><span style="color:#8B8898;font-size:12px">${esc(TYPE_LABELS[s.business_type] || '')}${s.city ? ' · ' + esc(s.city) : ''}</span>`);
     _markers.addLayer(m); pts.push([s.lat, s.lon]);
   });
   if (pts.length) _map.fitBounds(pts, { padding: [50, 50], maxZoom: 15 });
@@ -1472,7 +1477,7 @@ function salonCard(s) {
     ? el('span', { class: 'type-pill', style: 'background:#FFF4E0;color:#8a5a00' }, 'Unclaimed')
     : (s.is_published ? el('span', { class: 'type-pill', style: 'background:#E2F6F2;color:var(--mint)' }, 'Book online') : '');
   return el('a', { class: 'salon-card', href: `/${s.slug}` },
-    el('div', { class: 'cover', style: s.cover_url ? `background-image:url('${s.cover_url}')` : '' }),
+    el('div', { class: 'cover', style: s.cover_url ? `background-image:url("${String(s.cover_url).replace(/["'()\\]/g, '')}")` : '' }),
     el('div', { class: 'body' },
       el('h3', {}, s.name),
       el('div', { class: 'meta' }, [s.city, s.address].filter(Boolean).join(' · ') || ''),
