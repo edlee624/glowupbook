@@ -40,7 +40,7 @@ Deno.serve(async (req) => {
     const { data: a, error: fetchErr } = await supa
       .from("appointments")
       .select("id, starts_at, confirm_token, customer:customers(name,email), salon:salons(name,timezone,slug), service:services(name)")
-      .eq("id", apptId).single();
+      .eq("id", apptId).maybeSingle();
     if (fetchErr) return new Response(`lookup failed: ${fetchErr.message}`, { status: 500 });
     if (!a) return new Response("appointment not found", { status: 404 });
     if (!a?.customer?.email) return new Response("no recipient email on file", { status: 422 });

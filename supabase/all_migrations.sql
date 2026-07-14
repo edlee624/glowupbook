@@ -1078,6 +1078,8 @@ declare
   v_salon public.salons%rowtype; v_service public.services%rowtype;
   v_total_min int; v_end timestamptz; v_dow int; v_customer uuid; v_appt uuid; v_ok boolean;
   v_uid uuid := auth.uid();
+  v_auth_email text;
+  v_email_is_mine boolean;
 begin
   if coalesce(trim(p_customer_name), '') = '' then raise exception 'A name is required to book.'; end if;
   select * into v_salon from public.salons where slug = p_slug and is_published;
@@ -1112,17 +1114,28 @@ begin
     raise exception 'That time is not available.';
   end if;
 
-  -- NEW: same person can't double-book overlapping times across any salon.
-  if exists (
+  -- The caller's verified email (only for logged-in users). Used to decide when
+  -- a booking may be tied to their account — never trust the free-text field.
+  if v_uid is not null then
+    select email into v_auth_email from auth.users where id = v_uid;
+  end if;
+  v_email_is_mine := v_uid is not null and v_auth_email is not null
+                     and lower(trim(coalesce(p_customer_email, ''))) = lower(v_auth_email);
+
+  -- Same person can't hold two overlapping appointments across salons. Only
+  -- enforced for the logged-in caller's own identity (account or verified email)
+  -- so anonymous callers can't probe someone else's schedule via this error.
+  if v_uid is not null and exists (
     select 1 from public.appointments a join public.customers cu on cu.id = a.customer_id
     where a.status in ('booked','confirmed','completed')
       and a.starts_at < v_end and a.ends_at > p_start
-      and ( (v_uid is not null and cu.account_id = v_uid)
-            or (coalesce(trim(p_customer_email),'') <> '' and lower(cu.email) = lower(trim(p_customer_email))) )
+      and ( cu.account_id = v_uid
+            or (v_auth_email is not null and lower(cu.email) = lower(v_auth_email)) )
   ) then
     raise exception 'You already have a booking that overlaps this time. Please pick another slot.';
   end if;
 
+  -- Resolve the customer record for this booking.
   if v_uid is not null then
     select id into v_customer from public.customers where salon_id = v_salon.id and account_id = v_uid limit 1;
   end if;
@@ -1131,9 +1144,13 @@ begin
   end if;
   if v_customer is null then
     insert into public.customers (salon_id, name, email, phone, account_id)
-    values (v_salon.id, trim(p_customer_name), nullif(trim(p_customer_email), ''), nullif(trim(p_customer_phone), ''), v_uid)
+    values (v_salon.id, trim(p_customer_name), nullif(trim(p_customer_email), ''), nullif(trim(p_customer_phone), ''),
+            case when v_uid is not null and (coalesce(trim(p_customer_email),'') = '' or v_email_is_mine)
+                 then v_uid else null end)
     returning id into v_customer;
-  elsif v_uid is not null then
+  elsif v_email_is_mine then
+    -- Claim an existing walk-in record ONLY when the booking email is the
+    -- caller's own verified email (prevents claiming another person's record).
     update public.customers set account_id = v_uid where id = v_customer and account_id is null;
   end if;
 
@@ -1216,7 +1233,13 @@ grant execute on function public.create_salon(text, text, text, text, text) to a
 create or replace function public.guard_profile_role()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  if new.role is distinct from old.role and not public.is_admin() then
+  -- Block role changes made through the public API (PostgREST runs as the
+  -- 'authenticated'/'anon' role) unless the caller is already an admin. Trusted
+  -- server-side sessions (SQL editor = 'postgres', service key = 'service_role')
+  -- pass through so the first admin can be provisioned.
+  if new.role is distinct from old.role
+     and current_user in ('authenticated', 'anon')
+     and not public.is_admin() then
     new.role := old.role;
   end if;
   return new;
