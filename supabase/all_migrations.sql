@@ -1233,12 +1233,16 @@ grant execute on function public.create_salon(text, text, text, text, text) to a
 create or replace function public.guard_profile_role()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  -- Block role changes made through the public API (PostgREST runs as the
-  -- 'authenticated'/'anon' role) unless the caller is already an admin. Trusted
-  -- server-side sessions (SQL editor = 'postgres', service key = 'service_role')
-  -- pass through so the first admin can be provisioned.
+  -- Block role self-changes from API callers unless the caller is already an
+  -- admin. An API request carries a user JWT, so auth.uid() is non-null; the SQL
+  -- editor / service-role sessions have no user JWT (auth.uid() is null) and pass
+  -- through, so the first admin can be provisioned.
+  --
+  -- NB: gate on auth.uid(), NOT current_user — this function is SECURITY DEFINER,
+  -- so inside it current_user is always the owner ('postgres'), which would make a
+  -- current_user check never match an API caller and silently disable the guard.
   if new.role is distinct from old.role
-     and current_user in ('authenticated', 'anon')
+     and auth.uid() is not null
      and not public.is_admin() then
     new.role := old.role;
   end if;
