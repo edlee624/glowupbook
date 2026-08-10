@@ -13,6 +13,32 @@
   const SUPPORTED = ['en', 'ru', 'ky', 'tr', 'ko'];
   const NAMES = { en: 'English', ru: 'Русский', ky: 'Кыргызча', tr: 'Türkçe', ko: '한국어' };
 
+  // --- language-prefixed URLs: English at the root, others under /<lang>/ ------
+  const PREFIXED = ['ru', 'ky', 'tr', 'ko'];
+  const LANG_RE = new RegExp('^/(' + PREFIXED.join('|') + ')(?=/|$)');
+  function urlLang() { const m = location.pathname.match(LANG_RE); return m ? m[1] : null; }
+  // The pathname with any language prefix stripped — the canonical path used for
+  // routing and for building per-language URLs.
+  function basePath() { return location.pathname.replace(LANG_RE, '') || '/'; }
+
+  // At an un-prefixed (English) URL, if the visitor's resolved language isn't
+  // English, send them to the prefixed URL so the rendered language always
+  // matches the URL (bookmarkable + crawlable per language). Loop-safe: only
+  // fires when there's no prefix yet, and the target always has one.
+  (function redirectToLang() {
+    if (urlLang()) return;
+    let pref;
+    try { pref = localStorage.getItem('glowbook_lang'); } catch (_) {}
+    if (!pref || !SUPPORTED.includes(pref)) {
+      const nav = (navigator.language || 'en').toLowerCase();
+      pref = PREFIXED.find((l) => nav.startsWith(l)) || 'en';
+    }
+    if (pref && PREFIXED.includes(pref)) {
+      const bp = basePath();
+      location.replace('/' + pref + (bp === '/' ? '/' : bp) + location.search + location.hash);
+    }
+  })();
+
   const DICT = {
     en: {
       'home.hero.h1': 'Find & book beauty and nail salons near you',
@@ -602,16 +628,9 @@
   };
 
   function detect() {
-    try {
-      const saved = localStorage.getItem('glowbook_lang');
-      if (saved && SUPPORTED.includes(saved)) return saved;
-    } catch (_) {}
-    const nav = (navigator.language || 'en').toLowerCase();
-    if (nav.startsWith('ru')) return 'ru';
-    if (nav.startsWith('ky')) return 'ky';
-    if (nav.startsWith('tr')) return 'tr';
-    if (nav.startsWith('ko')) return 'ko';
-    return 'en';
+    // The URL prefix is authoritative. An un-prefixed URL renders English
+    // (non-English preferences were already redirected above).
+    return urlLang() || 'en';
   }
 
   const I18N = {
@@ -653,14 +672,48 @@
     set(lang) {
       if (!SUPPORTED.includes(lang) || lang === this.lang) return;
       try { localStorage.setItem('glowbook_lang', lang); } catch (_) {}
-      // Reliable full re-render for a SPA whose views are built in JS: reload,
-      // and every t() call then reads the new language.
-      location.reload();
+      // Navigate to the language-prefixed URL (en = no prefix). A full load
+      // re-renders every t() call in the new language and keeps the URL canonical.
+      const bp = basePath();
+      let target = (lang === 'en' ? '' : '/' + lang) + bp;
+      if (target === '') target = '/';
+      location.href = target + location.search + location.hash;
+    },
+    urlLang, basePath,
+    // Inject <link rel="alternate" hreflang> for every language + x-default, and
+    // point canonical at the current language URL. Called on load.
+    injectHreflang() {
+      const bp = basePath();
+      const url = (l) => location.origin + (l === 'en' ? '' : '/' + l) + (bp === '/' && l !== 'en' ? '/' : bp);
+      document.querySelectorAll('link[data-i18n-alt]').forEach((n) => n.remove());
+      const add = (hreflang, href) => {
+        const l = document.createElement('link');
+        l.rel = 'alternate'; l.hreflang = hreflang; l.href = href; l.setAttribute('data-i18n-alt', '');
+        document.head.appendChild(l);
+      };
+      SUPPORTED.forEach((l) => add(l, url(l)));
+      add('x-default', url('en'));
+      const can = document.querySelector('link[rel="canonical"]');
+      if (can) can.href = url(this.lang);
     },
   };
 
   window.I18N = I18N;
   window.t = (k, v) => I18N.t(k, v);
 
-  document.addEventListener('DOMContentLoaded', () => { I18N.apply(document); I18N.wireSwitchers(); });
+  document.addEventListener('DOMContentLoaded', () => { I18N.apply(document); I18N.wireSwitchers(); I18N.injectHreflang(); });
+
+  // Keep the language prefix across internal <a> navigations (e.g. salon cards,
+  // footer links). Only rewrites same-origin, non-file, un-prefixed paths.
+  document.addEventListener('click', (e) => {
+    if (I18N.lang === 'en' || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    const a = e.target.closest && e.target.closest('a');
+    if (!a || a.target === '_blank') return;
+    const href = a.getAttribute('href');
+    if (!href || href[0] !== '/' || href[1] === '/') return;   // internal absolute only
+    if (LANG_RE.test(href)) return;                            // already prefixed
+    if (/\.[a-z0-9]+(\?|$)/i.test(href)) return;               // static file
+    e.preventDefault();
+    location.href = '/' + I18N.lang + href;
+  });
 })();

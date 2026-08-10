@@ -122,9 +122,12 @@ const RESERVED = new Set([
   'fonts', 'config', 'favicon', 'robots', 'sitemap', 'index', 'www', 'home', 'confirm', 'demo',
 ]);
 
+// The current path with any /<lang>/ prefix stripped (so routing is language-agnostic).
+function routePath() { return (window.I18N && I18N.basePath) ? I18N.basePath() : location.pathname; }
+
 // Returns the salon slug if the current URL is a storefront, else null.
-function storefrontSlug() {
-  const seg = location.pathname.replace(/^\/+|\/+$/g, '');   // trim slashes
+function storefrontSlug(path) {
+  const seg = (path || routePath()).replace(/^\/+|\/+$/g, '');   // trim slashes
   if (!seg || seg.includes('/') || seg.includes('.')) return null;  // root / nested / file
   if (RESERVED.has(seg.toLowerCase())) return null;
   return seg;
@@ -135,11 +138,12 @@ function storefrontSlug() {
 const APP_PATHS = new Set(['app', 'login', 'log-in', 'signin', 'sign-in', 'dashboard', 'admin', 'account']);
 
 async function boot() {
-  const cm = location.pathname.match(/^\/confirm\/([0-9a-fA-F-]{8,})/);
+  const path = routePath();   // language prefix stripped
+  const cm = path.match(/^\/confirm\/([0-9a-fA-F-]{8,})/);
   if (cm) return startConfirm(cm[1]);
-  const sl = storefrontSlug();
+  const sl = storefrontSlug(path);
   if (sl) return startStorefront(sl);
-  const p = location.pathname.replace(/^\/+|\/+$/g, '').toLowerCase();
+  const p = path.replace(/^\/+|\/+$/g, '').toLowerCase();
   if (p === 'demo') return startDemo();
   if (p === 'terms' || p === 'privacy' || p === 'legal') return startLegal(p);
   if (APP_PATHS.has(p)) return startDashboardApp();
