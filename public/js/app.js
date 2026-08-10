@@ -30,7 +30,7 @@ function toast(msg, bad = false) {
   const t = $('#toast'); t.textContent = msg; t.className = 'toast show' + (bad ? ' bad' : '');
   clearTimeout(toastT); toastT = setTimeout(() => (t.className = 'toast'), 2800);
 }
-function errToast(e) { console.error(e); toast(e?.message || 'Something went wrong', true); }
+function errToast(e) { console.error(e); toast(e?.message || t('app.toast.error'), true); }
 function money(n, cur = 'USD') {
   try { return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(n || 0); }
   catch { return `${cur} ${Number(n || 0).toFixed(2)}`; }
@@ -50,33 +50,33 @@ function showEmailConfirmNotice(container, email, opts = {}) {
   if (!container) return;
   container.querySelector('#email-confirm-note')?.remove();
   container.append(el('div', { id: 'email-confirm-note', class: 'banner', style: 'margin-top:12px' },
-    `${opts.prefix || 'Almost there!'} We sent a confirmation link to ${email}. Open it to activate your account, then log in. `,
+    `${opts.prefix || t('app.auth.almostThere')} ${t('app.auth.confirmSent', { email })} `,
     el('a', { href: '#', onclick: async (e) => {
       e.preventDefault();
-      try { await API.auth.resendConfirmation(email); toast('Confirmation email resent'); }
+      try { await API.auth.resendConfirmation(email); toast(t('app.toast.confirmResent')); }
       catch (err) { errToast(err); }
-    } }, 'Resend email')));
+    } }, t('app.auth.resendEmail'))));
 }
 
 // "I agree to the Terms & Privacy Policy" checkbox. Returns the label node with
 // a `.checkbox` ref; call agreed(node) to validate.
-function consentCheckbox(prefix = 'I agree to the') {
+function consentCheckbox(prefix = t('app.consent.iAgree')) {
   const cb = el('input', { type: 'checkbox', style: 'width:auto;margin-top:2px' });
   const node = el('label', { class: 'consent', style: 'display:flex;gap:8px;align-items:flex-start;font-weight:400;font-size:13px;margin:2px 0 12px;color:var(--grey)' },
     cb, el('span', {}, `${prefix} `,
-      el('a', { href: '/terms', target: '_blank', rel: 'noopener' }, 'Terms'),
-      ' and ',
-      el('a', { href: '/privacy', target: '_blank', rel: 'noopener' }, 'Privacy Policy'), '.'));
+      el('a', { href: '/terms', target: '_blank', rel: 'noopener' }, t('app.consent.terms')),
+      t('app.consent.and'),
+      el('a', { href: '/privacy', target: '_blank', rel: 'noopener' }, t('app.consent.privacy')), '.'));
   node.checkbox = cb;
   return node;
 }
 function agreed(node) {
   if (node?.checkbox?.checked) return true;
-  toast('Please agree to the Terms & Privacy Policy to continue', true);
+  toast(t('app.consent.pleaseAgree'), true);
   return false;
 }
 
-const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DOW = [t('app.dow.sun'), t('app.dow.mon'), t('app.dow.tue'), t('app.dow.wed'), t('app.dow.thu'), t('app.dow.fri'), t('app.dow.sat')];
 const slug = (s) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const todayISO = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 // Is `tz` a usable IANA timezone? (guards against free-text like "New York")
@@ -149,18 +149,18 @@ async function boot() {
 // Public appointment-confirmation page (from an emailed/texted link).
 async function startConfirm(token) {
   show('#screen-store');
-  const root = $('#store-body'); root.innerHTML = '<p class="muted">Confirming your appointment…</p>';
-  if (!API.enabled) { root.innerHTML = ''; return root.append(el('div', { class: 'banner' }, 'Not connected to a backend.')); }
+  const root = $('#store-body'); root.innerHTML = '<p class="muted">' + t('app.confirm.confirming') + '</p>';
+  if (!API.enabled) { root.innerHTML = ''; return root.append(el('div', { class: 'banner' }, t('app.common.notConnected'))); }
   let info = null;
   try { info = await API.storefront.confirm(token); }
-  catch (e) { root.innerHTML = ''; return root.append(el('div', { class: 'card empty' }, 'Could not confirm: ' + e.message)); }
+  catch (e) { root.innerHTML = ''; return root.append(el('div', { class: 'card empty' }, t('app.confirm.couldNot') + e.message)); }
   root.innerHTML = '';
-  if (!info) { root.append(el('div', { class: 'card empty' }, 'This confirmation link is invalid or expired.')); return; }
+  if (!info) { root.append(el('div', { class: 'card empty' }, t('app.confirm.invalid'))); return; }
   root.append(el('div', { class: 'card', style: 'text-align:center;padding:40px' },
     el('div', { style: 'font-size:48px' }, '✓'),
-    el('h2', { style: 'margin:10px 0' }, "You're confirmed!"),
-    el('p', { class: 'muted' }, `${info.service_name || 'Appointment'} at ${info.salon_name} on ${new Date(info.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.`),
-    el('a', { class: 'btn', style: 'margin-top:10px', href: '/' }, 'Browse salons')));
+    el('h2', { style: 'margin:10px 0' }, t('app.confirm.confirmed')),
+    el('p', { class: 'muted' }, `${info.service_name || t('app.common.appointment')} ` + t('app.confirm.atOn', { salon: info.salon_name, when: new Date(info.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) })),
+    el('a', { class: 'btn', style: 'margin-top:10px', href: '/' }, t('app.common.browseSalons'))));
 }
 
 // ---- legal pages (terms / privacy) ----------------------------------------
@@ -270,7 +270,7 @@ function startLegal(page) {
   show('#screen-legal');
   const body = $('#legal-body');
   if (page === 'legal') {
-    body.innerHTML = '<h1>Legal</h1><p><a href="/terms">Terms of Service</a> · <a href="/privacy">Privacy Policy</a></p>';
+    body.innerHTML = `<h1>${t('app.legal.legal')}</h1><p><a href="/terms">${t('app.legal.terms')}</a> · <a href="/privacy">${t('app.legal.privacy')}</a></p>`;
     return;
   }
   body.innerHTML = LEGAL[page] || LEGAL.terms;
@@ -315,7 +315,7 @@ async function afterLogin() {
       sessionStorage.removeItem('claim_slug');
       try {
         const s = await API.storefront.salon(claimSlug);
-        if (s && !s.claimed) { await API.salons.claim(s.id); claimed = true; toast('Salon claimed! Finish setting it up below.'); }
+        if (s && !s.claimed) { await API.salons.claim(s.id); claimed = true; toast(t('app.toast.claimed')); }
       } catch (e) { errToast(e); }
     }
     const prof = await API.auth.profile();
@@ -340,21 +340,21 @@ async function startAdmin() {
   $('#admin-signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
   show('#screen-admin');
   const body = $('#admin-body');
-  body.innerHTML = '<p class="muted">Loading…</p>';
+  body.innerHTML = '<p class="muted">' + t('app.common.loading') + '</p>';
   let ov = {};
   try { ov = await API.admin.overview(); } catch (e) { body.innerHTML = ''; return errToast(e); }
   body.innerHTML = '';
   const stats = [
-    ['Salons', ov.salons_total], ['Claimed', ov.salons_claimed], ['Published', ov.salons_published],
-    ['Customers', ov.customers], ['Appointments', ov.appointments], ['Users', ov.users],
+    [t('app.admin.salons'), ov.salons_total], [t('app.admin.claimed'), ov.salons_claimed], [t('app.admin.published'), ov.salons_published],
+    [t('app.admin.customers'), ov.customers], [t('app.admin.appointments'), ov.appointments], [t('app.admin.users'), ov.users],
   ];
   const statGrid = el('div', { class: 'admin-stats' });
   stats.forEach(([label, val]) => statGrid.append(el('div', { class: 'card', style: 'text-align:center' },
     el('div', { style: 'font-size:28px;font-weight:800;font-family:Fraunces,serif' }, String(val ?? '—')),
     el('div', { class: 'muted', style: 'font-size:13px' }, label))));
-  body.append(el('h1', { style: 'margin-bottom:14px' }, 'Admin'), statGrid);
+  body.append(el('h1', { style: 'margin-bottom:14px' }, t('app.admin.title')), statGrid);
 
-  const search = el('input', { placeholder: 'Search salons by name, city, slug…', style: 'max-width:340px;margin:20px 0 12px' });
+  const search = el('input', { placeholder: t('app.admin.searchPh'), style: 'max-width:340px;margin:20px 0 12px' });
   body.append(search);
   const tableWrap = el('div'); body.append(tableWrap);
   let t;
@@ -362,24 +362,24 @@ async function startAdmin() {
     let list = [];
     try { list = await API.admin.salons({ search: search.value.trim() }); } catch (e) { return errToast(e); }
     tableWrap.innerHTML = '';
-    if (!list.length) { tableWrap.append(el('div', { class: 'card empty' }, 'No salons found.')); return; }
+    if (!list.length) { tableWrap.append(el('div', { class: 'card empty' }, t('app.admin.noSalons'))); return; }
     const tb = el('tbody');
     list.forEach((s) => {
-      const livePill = el('span', { class: 'pill', style: s.is_published ? 'background:#E2F6F2;color:var(--mint)' : 'background:var(--paper-dim);color:var(--grey)' }, s.is_published ? 'Live' : 'Off');
+      const livePill = el('span', { class: 'pill', style: s.is_published ? 'background:#E2F6F2;color:var(--mint)' : 'background:var(--paper-dim);color:var(--grey)' }, s.is_published ? t('app.common.live') : t('app.admin.off'));
       tb.append(el('tr', {},
         el('td', {}, el('a', { href: `/${s.slug}`, target: '_blank' }, s.name)),
         el('td', {}, TYPE_LABELS[s.business_type] || s.business_type || '—'),
         el('td', {}, s.city || '—'),
-        el('td', {}, s.claimed ? 'claimed' : el('span', { class: 'muted' }, 'unclaimed')),
+        el('td', {}, s.claimed ? t('app.admin.claimedLc') : el('span', { class: 'muted' }, t('app.admin.unclaimed'))),
         el('td', {}, livePill),
         el('td', {},
-          el('button', { class: 'btn ghost sm', onclick: async () => { try { await API.admin.setPublished(s.id, !s.is_published); load(); toast('Updated'); } catch (e) { errToast(e); } } }, s.is_published ? 'Unpublish' : 'Publish'),
+          el('button', { class: 'btn ghost sm', onclick: async () => { try { await API.admin.setPublished(s.id, !s.is_published); load(); toast(t('app.toast.updated')); } catch (e) { errToast(e); } } }, s.is_published ? t('app.admin.unpublish') : t('app.common.publish')),
           ' ',
-          el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm(`Delete "${s.name}"? This removes the salon and all its data.`)) return; try { await API.admin.remove(s.id); load(); toast('Deleted'); } catch (e) { errToast(e); } } }, 'Delete')),
+          el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm(t('app.admin.deleteConfirm', { name: s.name }))) return; try { await API.admin.remove(s.id); load(); toast(t('app.toast.deleted')); } catch (e) { errToast(e); } } }, t('app.common.delete'))),
       ));
     });
     tableWrap.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
-      el('table', {}, el('thead', {}, el('tr', {}, ...['Salon', 'Type', 'City', 'Listing', 'Bookable', 'Actions'].map((h) => el('th', {}, h)))), tb)));
+      el('table', {}, el('thead', {}, el('tr', {}, ...[t('app.admin.thSalon'), t('app.admin.thType'), t('app.admin.thCity'), t('app.admin.thListing'), t('app.admin.thBookable'), t('app.admin.thActions')].map((h) => el('th', {}, h)))), tb)));
   }
   search.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   load();
@@ -439,12 +439,12 @@ function startDemo() {
     wireAppShell();
     $('#signout').onclick = () => { location.href = '/app'; };
     const link = $('#view-storefront'); link.removeAttribute('href'); link.removeAttribute('target');
-    link.onclick = (e) => { e.preventDefault(); toast('Sign up to get your own booking page'); };
+    link.onclick = (e) => { e.preventDefault(); toast(t('app.demo.signupToast')); };
     const app = $('#screen-app');
     if (!app.querySelector('.demo-bar')) {
       app.prepend(el('div', { class: 'demo-bar', style: 'grid-column:1/-1;border-radius:0;margin:0' },
-        el('span', {}, '🎬 Live demo — click around freely; changes reset on refresh.'),
-        el('a', { href: '/app', class: 'btn sm' }, 'Sign up free')));
+        el('span', {}, t('app.demo.bar')),
+        el('a', { href: '/app', class: 'btn sm' }, t('app.demo.signupFree'))));
     }
     show('#screen-app');
     navigate('calendar');
@@ -455,7 +455,7 @@ function startDemo() {
 async function startEmployee(prof) {
   $('#emp-signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
   show('#screen-employee');
-  const body = $('#emp-body'); body.innerHTML = '<p class="muted">Loading…</p>';
+  const body = $('#emp-body'); body.innerHTML = '<p class="muted">' + t('app.common.loading') + '</p>';
   const user = state.user || await API.auth.currentUser();
   let mine = []; try { mine = await API.salons.mine(); } catch { /* ignore */ }
   const salonId = mine[0]?.id || null;
@@ -464,17 +464,17 @@ async function startEmployee(prof) {
   // Profile / contact / skills
   const f = {};
   body.append(el('div', { class: 'card', style: 'max-width:560px;margin-bottom:18px' },
-    el('h1', { style: 'margin-bottom:12px' }, 'My profile'),
-    field('Name', f.name = el('input', { value: prof?.full_name || '' })),
-    field('Phone', f.phone = el('input', { value: prof?.phone || '' })),
-    field('Skills', f.skills = el('input', { value: prof?.skills || '', placeholder: 'e.g. Balayage, Fades, Gel nails' })),
-    field('Bio', f.bio = el('textarea', { rows: 2 }, prof?.bio || '')),
-    el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, `Email: ${user?.email || ''}`),
-    el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null, skills: f.skills.value.trim() || null, bio: f.bio.value.trim() || null }); toast('Saved'); } catch (e) { errToast(e); } } }, 'Save')));
+    el('h1', { style: 'margin-bottom:12px' }, t('app.emp.myProfile')),
+    field(t('app.common.name'), f.name = el('input', { value: prof?.full_name || '' })),
+    field(t('app.common.phone'), f.phone = el('input', { value: prof?.phone || '' })),
+    field(t('app.emp.skills'), f.skills = el('input', { value: prof?.skills || '', placeholder: t('app.emp.skillsPh') })),
+    field(t('app.emp.bio'), f.bio = el('textarea', { rows: 2 }, prof?.bio || '')),
+    el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, t('app.common.emailLabel', { email: user?.email || '' })),
+    el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null, skills: f.skills.value.trim() || null, bio: f.bio.value.trim() || null }); toast(t('app.toast.saved')); } catch (e) { errToast(e); } } }, t('app.common.save'))));
 
   body.append(mine.length
-    ? el('p', { class: 'muted', style: 'margin:0 0 8px' }, 'You work at: ' + mine.map((s) => s.name).join(', '))
-    : el('div', { class: 'banner' }, `You're not linked to a salon yet. Ask your salon's admin to add you using your email: ${user?.email || ''}`));
+    ? el('p', { class: 'muted', style: 'margin:0 0 8px' }, t('app.emp.worksAt') + mine.map((s) => s.name).join(', '))
+    : el('div', { class: 'banner' }, t('app.emp.notLinked', { email: user?.email || '' })));
 
   // Appointments (upcoming + history)
   let appts = []; try { appts = await API.employee.myAppointments(); } catch (e) { errToast(e); }
@@ -489,23 +489,23 @@ async function startEmployee(prof) {
       el('td', {}, a.service_name || '—'), el('td', {}, a.customer_name || '—'),
       el('td', {}, a.salon_name || ''), el('td', {}, statusPill(a.status)))));
     return el('div', { class: 'card', style: 'padding:0;overflow:auto' },
-      el('table', {}, el('thead', {}, el('tr', {}, ...['When', 'Service', 'Customer', 'Salon', 'Status'].map((h) => el('th', {}, h)))), tb));
+      el('table', {}, el('thead', {}, el('tr', {}, ...[t('app.common.thWhen'), t('app.common.thService'), t('app.common.thCustomer'), t('app.common.thSalon'), t('app.common.thStatus')].map((h) => el('th', {}, h)))), tb));
   };
-  body.append(el('h3', { style: 'margin:20px 0 10px' }, 'Upcoming appointments'), apptTable(upcoming, 'No upcoming appointments assigned to you.'));
-  body.append(el('h3', { style: 'margin:24px 0 10px' }, 'Past appointments'), apptTable(past.slice(0, 50), 'No past appointments yet.'));
+  body.append(el('h3', { style: 'margin:20px 0 10px' }, t('app.appt.upcoming')), apptTable(upcoming, t('app.emp.noUpcoming')));
+  body.append(el('h3', { style: 'margin:24px 0 10px' }, t('app.emp.past')), apptTable(past.slice(0, 50), t('app.emp.noPast')));
 
   // Portfolio
   body.append(el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin:26px 0 10px;gap:12px;flex-wrap:wrap' },
-    el('h3', {}, 'My work / portfolio'),
+    el('h3', {}, t('app.emp.portfolio')),
     (() => {
       const fileIn = el('input', { type: 'file', accept: 'image/*', style: 'display:none' });
-      const btn = el('button', { class: 'btn', onclick: () => fileIn.click() }, '📷 Add photo');
+      const btn = el('button', { class: 'btn', onclick: () => fileIn.click() }, t('app.emp.addPhoto'));
       fileIn.onchange = async () => {
         const file = fileIn.files[0]; if (!file) return;
-        const caption = prompt('Add a caption (optional):') || null;
-        btn.disabled = true; btn.textContent = 'Uploading…';
-        try { await API.employee.uploadPhoto(file, { salonId, caption }); toast('Photo added'); renderPortfolio(); }
-        catch (e) { errToast(e); } finally { btn.disabled = false; btn.textContent = '📷 Add photo'; fileIn.value = ''; }
+        const caption = prompt(t('app.emp.captionPrompt')) || null;
+        btn.disabled = true; btn.textContent = t('app.emp.uploading');
+        try { await API.employee.uploadPhoto(file, { salonId, caption }); toast(t('app.emp.photoAdded')); renderPortfolio(); }
+        catch (e) { errToast(e); } finally { btn.disabled = false; btn.textContent = t('app.emp.addPhoto'); fileIn.value = ''; }
       };
       return el('span', {}, btn, fileIn);
     })()));
@@ -513,11 +513,11 @@ async function startEmployee(prof) {
   async function renderPortfolio() {
     grid.innerHTML = '';
     let photos = []; try { photos = await API.employee.myPortfolio(); } catch (e) { return errToast(e); }
-    if (!photos.length) { grid.append(el('div', { class: 'muted', style: 'grid-column:1/-1' }, 'No photos yet. Snap your finished looks to build your portfolio — they can appear on your salon\'s page.')); return; }
+    if (!photos.length) { grid.append(el('div', { class: 'muted', style: 'grid-column:1/-1' }, t('app.emp.noPhotos'))); return; }
     photos.forEach((p) => grid.append(el('div', { class: 'pf-tile' },
       el('img', { src: p.url, alt: p.caption || '' }),
       p.caption ? el('div', { class: 'pf-cap' }, p.caption) : '',
-      el('button', { class: 'pf-del', title: 'Delete', onclick: async () => { if (!confirm('Delete this photo?')) return; try { await API.employee.removePhoto(p); renderPortfolio(); } catch (e) { errToast(e); } } }, '✕'))));
+      el('button', { class: 'pf-del', title: t('app.common.delete'), onclick: async () => { if (!confirm(t('app.emp.deletePhotoConfirm'))) return; try { await API.employee.removePhoto(p); renderPortfolio(); } catch (e) { errToast(e); } } }, '✕'))));
   }
   renderPortfolio();
 }
@@ -533,7 +533,7 @@ function wireAuthScreen() {
     $('#tab-signup').classList.toggle('on', m === 'signup');
     $('#name-field').classList.toggle('hidden', m === 'login');
     consent.classList.toggle('hidden', m === 'login');
-    $('#au-submit').textContent = m === 'login' ? 'Log in' : 'Create account';
+    $('#au-submit').textContent = m === 'login' ? t('app.auth.login') : t('app.auth.createAccount');
     $('#au-pass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
   };
   $('#tab-login').onclick = () => setMode('login');
@@ -542,25 +542,25 @@ function wireAuthScreen() {
     e.preventDefault();
     const email = $('#au-email').value.trim();
     const password = $('#au-pass').value;
-    if (!email || !password) return toast('Enter email and password', true);
+    if (!email || !password) return toast(t('app.auth.enterEmailPass'), true);
     if (mode === 'signup' && !agreed(consent)) return;
     try {
       if (mode === 'signup') {
         const res = await API.auth.signUp({ email, password, fullName: $('#au-name').value.trim() });
-        if (!res?.session) { setMode('login'); showEmailConfirmNotice($('.auth-card'), email); toast('Check your email to confirm.'); return; }
+        if (!res?.session) { setMode('login'); showEmailConfirmNotice($('.auth-card'), email); toast(t('app.auth.checkEmail')); return; }
       } else {
         await API.auth.signIn({ email, password });
       }
     } catch (err) {
-      if (/confirm/i.test(err?.message || '')) { showEmailConfirmNotice($('.auth-card'), email, { prefix: 'Please confirm your email first.' }); toast('Email not confirmed yet', true); return; }
+      if (/confirm/i.test(err?.message || '')) { showEmailConfirmNotice($('.auth-card'), email, { prefix: t('app.auth.confirmFirst') }); toast(t('app.auth.notConfirmed'), true); return; }
       errToast(err);
     }
   };
   $('#forgot').onclick = async (e) => {
     e.preventDefault();
     const email = $('#au-email').value.trim();
-    if (!email) return toast('Enter your email first', true);
-    try { await API.auth.sendPasswordReset(email); toast('Password reset email sent'); }
+    if (!email) return toast(t('app.auth.enterEmailFirst'), true);
+    try { await API.auth.sendPasswordReset(email); toast(t('app.auth.resetSent')); }
     catch (err) { errToast(err); }
   };
   setMode('login');   // apply initial state so the name field is hidden on load
@@ -578,25 +578,25 @@ function wireOnboarding() {
     const s = slugIn.value;
     if (!s) { msg.textContent = ''; slugOk = false; return; }
     if (RESERVED.has(s.toLowerCase())) {
-      slugOk = false; msg.textContent = '✗ that name is reserved — pick another'; msg.style.color = 'var(--bad)'; return;
+      slugOk = false; msg.textContent = t('app.onb.reserved'); msg.style.color = 'var(--bad)'; return;
     }
     try {
       slugOk = await API.salons.slugAvailable(s);
-      msg.textContent = slugOk ? `✓ ${APP_DOMAIN}/${s}` : '✗ that link is taken';
+      msg.textContent = slugOk ? `✓ ${APP_DOMAIN}/${s}` : t('app.onb.taken');
       msg.style.color = slugOk ? 'var(--mint)' : 'var(--bad)';
     } catch { /* offline */ }
   }
   $('#onb-form').onsubmit = async (e) => {
     e.preventDefault();
-    if (!name.value.trim() || !slugIn.value) return toast('Name and link are required', true);
-    if (RESERVED.has(slugIn.value.toLowerCase())) return toast('That link name is reserved — pick another', true);
-    if (tz.value.trim() && !validTz(tz.value.trim())) return toast('Enter a valid timezone, e.g. America/New_York', true);
+    if (!name.value.trim() || !slugIn.value) return toast(t('app.onb.nameLinkRequired'), true);
+    if (RESERVED.has(slugIn.value.toLowerCase())) return toast(t('app.onb.reservedToast'), true);
+    if (tz.value.trim() && !validTz(tz.value.trim())) return toast(t('app.common.invalidTz'), true);
     try {
       state.salon = await API.salons.create({
         name: name.value.trim(), slug: slugIn.value, businessType: $('#onb-type').value,
         timezone: tz.value.trim() || 'UTC', currency: $('#onb-currency').value,
       });
-      toast('Salon created 🎉');
+      toast(t('app.onb.created'));
       wireAppShell(); show('#screen-app'); navigate('settings');
     } catch (err) { errToast(err); }
   };
@@ -633,17 +633,17 @@ async function renderGettingStarted(root) {
   try { [services, staff] = await Promise.all([API.services.list(state.salon.id), API.staff.list(state.salon.id)]); }
   catch { return; }
   const steps = [
-    { done: services.length > 0, label: 'Add your services', hint: 'What clients book — with price & duration', page: 'services' },
-    { done: staff.length > 0, label: 'Add staff & working hours', hint: 'Who takes appointments, and when', page: 'staff' },
-    { done: !!state.salon.is_published, label: 'Publish your booking page', hint: 'Go live so clients can book online', page: 'settings' },
+    { done: services.length > 0, label: t('app.gs.svcLabel'), hint: t('app.gs.svcHint'), page: 'services' },
+    { done: staff.length > 0, label: t('app.gs.staffLabel'), hint: t('app.gs.staffHint'), page: 'staff' },
+    { done: !!state.salon.is_published, label: t('app.gs.pubLabel'), hint: t('app.gs.pubHint'), page: 'settings' },
   ];
   if (steps.every((s) => s.done)) return;   // fully set up — hide the checklist
   const doneCount = steps.filter((s) => s.done).length;
   const card = el('div', { class: 'card gs-card' },
     el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px' },
-      el('h3', { style: 'margin:0' }, '🚀 Get your salon ready'),
-      el('span', { class: 'muted', style: 'font-size:13px' }, `${doneCount} of ${steps.length} done`)),
-    el('p', { class: 'muted', style: 'font-size:13px;margin:6px 0 12px' }, 'Finish these to start taking online bookings:'),
+      el('h3', { style: 'margin:0' }, t('app.gs.title')),
+      el('span', { class: 'muted', style: 'font-size:13px' }, t('app.gs.progress', { done: doneCount, total: steps.length }))),
+    el('p', { class: 'muted', style: 'font-size:13px;margin:6px 0 12px' }, t('app.gs.subtitle')),
     ...steps.map((s) => el('button', { class: 'gs-step' + (s.done ? ' done' : ''), onclick: () => navigate(s.page) },
       el('span', { class: 'gs-check' }, s.done ? '✓' : ''),
       el('span', { style: 'flex:1;text-align:left' }, el('strong', {}, s.label), el('div', { class: 'muted', style: 'font-size:12px' }, s.hint)),
@@ -682,14 +682,14 @@ PAGES.calendar = async (root) => {
   async function render() {
     head.innerHTML = '';
     const toggle = el('div', { class: 'viewtoggle' },
-      ...['day', 'week', 'month'].map((v) => el('button', { class: v === st.view ? 'on' : '', onclick: () => setView(v) }, v[0].toUpperCase() + v.slice(1))));
+      ...['day', 'week', 'month'].map((v) => el('button', { class: v === st.view ? 'on' : '', onclick: () => setView(v) }, t('app.cal.view.' + v))));
     head.append(
       el('h1', {}, titleFor()),
       el('div', { class: 'cal-controls' }, toggle,
         el('button', { class: 'btn ghost sm', onclick: () => shift(-1) }, '‹'),
-        el('button', { class: 'btn ghost sm', onclick: () => { st.anchor = new Date(); render(); } }, 'Today'),
+        el('button', { class: 'btn ghost sm', onclick: () => { st.anchor = new Date(); render(); } }, t('app.cal.today')),
         el('button', { class: 'btn ghost sm', onclick: () => shift(1) }, '›'),
-        el('button', { class: 'btn', onclick: () => openApptModal(st.anchor, render) }, '+ New')));
+        el('button', { class: 'btn', onclick: () => openApptModal(st.anchor, render) }, t('app.cal.new'))));
 
     const [from, to] = rangeFor();
     let appts = [];
@@ -734,7 +734,7 @@ PAGES.calendar = async (root) => {
   function renderMonth(gridStart, appts) {
     const tz = state.salon.timezone;
     const wrap = el('div', { class: 'cal-month' });
-    ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].forEach((d) => wrap.append(el('div', { class: 'cal-mcell', style: 'min-height:auto;background:var(--paper-dim);font-weight:600;font-size:12px;text-align:center;cursor:default' }, d)));
+    [t('app.dow.sun'), t('app.dow.mon'), t('app.dow.tue'), t('app.dow.wed'), t('app.dow.thu'), t('app.dow.fri'), t('app.dow.sat')].forEach((d) => wrap.append(el('div', { class: 'cal-mcell', style: 'min-height:auto;background:var(--paper-dim);font-weight:600;font-size:12px;text-align:center;cursor:default' }, d)));
     for (let i = 0; i < 42; i++) {
       const d = addDays(gridStart, i);
       const dayAppts = appts.filter((a) => apptOnDay(a, d, tz)).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
@@ -742,8 +742,8 @@ PAGES.calendar = async (root) => {
       const cell = el('div', { class: 'cal-mcell' + (other ? ' other' : '') + (sameDay(d, new Date()) ? ' today' : ''), onclick: () => { st.view = 'day'; st.anchor = d; render(); } },
         el('div', { class: 'dnum' }, String(d.getDate())));
       dayAppts.slice(0, 3).forEach((a) => cell.append(el('div', { class: 'cal-appt' + (a.status === 'cancelled' ? ' cancelled' : ''), onclick: (e) => { e.stopPropagation(); openApptModal(null, render, a); } },
-        `${fmtTime(a.starts_at, state.salon.timezone)} ${a.customer?.name || 'Walk-in'}`)));
-      if (dayAppts.length > 3) cell.append(el('div', { class: 'muted', style: 'font-size:11px' }, `+${dayAppts.length - 3} more`));
+        `${fmtTime(a.starts_at, state.salon.timezone)} ${a.customer?.name || t('app.common.walkin')}`)));
+      if (dayAppts.length > 3) cell.append(el('div', { class: 'muted', style: 'font-size:11px' }, t('app.cal.more', { n: dayAppts.length - 3 })));
       wrap.append(cell);
     }
     return wrap;
@@ -755,22 +755,22 @@ PAGES.calendar = async (root) => {
 // Appointment chip for the time grid (compact in week view).
 function calChip(a, refresh, compact) {
   const node = el('div', { class: 'cal-appt' + (a.status === 'cancelled' ? ' cancelled' : ''), onclick: () => openApptModal(null, refresh, a) });
-  if (compact) node.textContent = `${fmtTime(a.starts_at, state.salon.timezone)} ${a.customer?.name || 'Walk-in'}`;
-  else { node.append(el('div', { style: 'font-weight:700' }, `${fmtTime(a.starts_at, state.salon.timezone)} · ${a.customer?.name || 'Walk-in'}`), el('div', {}, `${a.service?.name || ''}${a.staff ? ' — ' + a.staff.name : ''}`)); }
+  if (compact) node.textContent = `${fmtTime(a.starts_at, state.salon.timezone)} ${a.customer?.name || t('app.common.walkin')}`;
+  else { node.append(el('div', { style: 'font-weight:700' }, `${fmtTime(a.starts_at, state.salon.timezone)} · ${a.customer?.name || t('app.common.walkin')}`), el('div', {}, `${a.service?.name || ''}${a.staff ? ' — ' + a.staff.name : ''}`)); }
   return node;
 }
 
 // ---- APPOINTMENTS (list) --------------------------------------------------
 PAGES.appointments = async (root) => {
-  root.append(el('div', { class: 'page-head' }, el('h1', {}, 'Upcoming appointments'),
-    el('button', { class: 'btn', onclick: () => openApptModal(new Date(), () => navigate('appointments')) }, '+ New')));
+  root.append(el('div', { class: 'page-head' }, el('h1', {}, t('app.appt.upcoming')),
+    el('button', { class: 'btn', onclick: () => openApptModal(new Date(), () => navigate('appointments')) }, t('app.cal.new'))));
   const from = new Date(); from.setHours(0, 0, 0, 0);
   const to = new Date(); to.setDate(to.getDate() + 30);
   let appts = [];
   try { appts = await API.appointments.range(state.salon.id, from.toISOString(), to.toISOString()); } catch (e) { return errToast(e); }
-  if (!appts.length) return root.append(el('div', { class: 'card empty' }, 'No appointments in the next 30 days.'));
-  const t = el('table', {}, el('thead', {}, el('tr', {},
-    ...['When', 'Customer', 'Service', 'Staff', 'Status', ''].map((h) => el('th', {}, h)))));
+  if (!appts.length) return root.append(el('div', { class: 'card empty' }, t('app.appt.none30')));
+  const t2 = el('table', {}, el('thead', {}, el('tr', {},
+    ...[t('app.common.thWhen'), t('app.common.thCustomer'), t('app.common.thService'), t('app.common.thStaff'), t('app.common.thStatus'), ''].map((h) => el('th', {}, h)))));
   const tb = el('tbody');
   appts.forEach((a) => tb.append(el('tr', {},
     el('td', {}, `${fmtDate(a.starts_at, state.salon.timezone)}, ${fmtTime(a.starts_at, state.salon.timezone)}`),
@@ -778,14 +778,14 @@ PAGES.appointments = async (root) => {
     el('td', {}, a.service?.name || '—'),
     el('td', {}, a.staff?.name || '—'),
     el('td', {}, statusPill(a.status)),
-    el('td', {}, el('button', { class: 'btn ghost sm', onclick: () => openApptModal(null, () => navigate('appointments'), a) }, 'Edit')),
+    el('td', {}, el('button', { class: 'btn ghost sm', onclick: () => openApptModal(null, () => navigate('appointments'), a) }, t('app.common.edit'))),
   )));
-  t.append(tb); root.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' }, t));
+  t2.append(tb); root.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' }, t2));
 };
 function statusPill(s) {
   const map = { booked: ['#EEE9FB', 'var(--plum)'], confirmed: ['#E2F6F2', 'var(--mint)'], completed: ['#E9ECEF', '#555'], cancelled: ['#FBE4E5', 'var(--bad)'], no_show: ['#FFF0DA', '#8a5a00'] };
   const [bg, fg] = map[s] || map.booked;
-  return el('span', { class: 'pill', style: `background:${bg};color:${fg}` }, s.replace('_', ' '));
+  return el('span', { class: 'pill', style: `background:${bg};color:${fg}` }, t('app.status.' + s));
 }
 
 // ---- appointment create/edit modal ---------------------------------------
@@ -802,58 +802,58 @@ async function openApptModal(day, refresh, existing) {
   // Customer: read-only (with contact details) when editing; a picker when new.
   if (existing) {
     const c = existing.customer || {};
-    wrap.append(el('div', { class: 'field' }, el('label', {}, 'Customer'),
+    wrap.append(el('div', { class: 'field' }, el('label', {}, t('app.common.customer')),
       el('div', { class: 'ro-box' },
-        el('strong', {}, c.name || 'Walk-in / none'),
+        el('strong', {}, c.name || t('app.appt.walkinNone')),
         (c.email || c.phone)
           ? el('div', { class: 'muted', style: 'font-size:13px;margin-top:3px' }, [c.email, c.phone].filter(Boolean).join(' · '))
-          : el('div', { class: 'muted', style: 'font-size:13px;margin-top:3px' }, 'No contact details on file'))));
+          : el('div', { class: 'muted', style: 'font-size:13px;margin-top:3px' }, t('app.appt.noContact')))));
   } else {
-    wrap.append(field('Customer', f.customer = el('select', {},
-      el('option', { value: '' }, '— Walk-in / none —'),
+    wrap.append(field(t('app.common.customer'), f.customer = el('select', {},
+      el('option', { value: '' }, t('app.appt.walkinNoneOpt')),
       custs.map((c) => el('option', { value: c.id }, c.name)))));
   }
   wrap.append(
-    field('Service', f.service = el('select', {}, svcs.map((s) =>
+    field(t('app.common.service'), f.service = el('select', {}, svcs.map((s) =>
       el('option', { value: s.id, 'data-dur': s.duration_min, 'data-price': s.price, ...(existing?.service_id === s.id ? { selected: true } : {}) }, `${s.name} (${s.duration_min}m)`)))),
-    field('Staff', f.staff = el('select', {}, el('option', { value: '' }, '— Unassigned —'),
+    field(t('app.common.staff'), f.staff = el('select', {}, el('option', { value: '' }, t('app.appt.unassigned')),
       stf.map((s) => el('option', { value: s.id, ...(existing?.staff_id === s.id ? { selected: true } : {}) }, s.name)))),
     el('div', { class: 'row' },
-      field('Date', f.date = el('input', { type: 'date', value: dateVal })),
-      field('Time', f.time = el('input', { type: 'time', value: timeVal })),
+      field(t('app.common.date'), f.date = el('input', { type: 'date', value: dateVal })),
+      field(t('app.common.time'), f.time = el('input', { type: 'time', value: timeVal })),
     ),
   );
-  if (existing) wrap.append(field('Status', f.status = el('select', {},
+  if (existing) wrap.append(field(t('app.common.status'), f.status = el('select', {},
     ['booked', 'confirmed', 'completed', 'cancelled', 'no_show'].map((s) =>
-      el('option', { value: s, ...(existing.status === s ? { selected: true } : {}) }, s.replace('_', ' '))))));
-  wrap.append(field('Notes', f.notes = el('textarea', { rows: 2 }, existing?.notes || '')));
+      el('option', { value: s, ...(existing.status === s ? { selected: true } : {}) }, t('app.status.' + s))))));
+  wrap.append(field(t('app.common.notes'), f.notes = el('textarea', { rows: 2 }, existing?.notes || '')));
 
   if (existing) {
-    const cs = existing.status === 'confirmed' ? '✓ Confirmed by the customer'
-      : existing.confirmation_requested_at ? '⏳ Awaiting customer confirmation' : null;
+    const cs = existing.status === 'confirmed' ? t('app.appt.confirmedByCust')
+      : existing.confirmation_requested_at ? t('app.appt.awaitingConfirm') : null;
     if (cs) wrap.append(el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:8px' }, cs));
   }
 
   const actions = el('div', { class: 'row', style: 'margin-top:8px' });
-  if (existing && existing.status !== 'cancelled') actions.append(el('button', { class: 'btn danger', onclick: () => openCancelDialog(existing, refresh, close) }, 'Cancel appointment'));
+  if (existing && existing.status !== 'cancelled') actions.append(el('button', { class: 'btn danger', onclick: () => openCancelDialog(existing, refresh, close) }, t('app.appt.cancelAppt')));
   if (existing && !['confirmed', 'cancelled', 'completed'].includes(existing.status)) {
-    actions.append(el('button', { class: 'btn ghost', onclick: requestConfirm }, 'Request confirmation'));
+    actions.append(el('button', { class: 'btn ghost', onclick: requestConfirm }, t('app.appt.requestConfirm')));
   }
-  actions.append(el('button', { class: 'btn', onclick: save }, existing ? 'Save changes' : 'Book appointment'));
+  actions.append(el('button', { class: 'btn', onclick: save }, existing ? t('app.common.saveChanges') : t('app.appt.bookAppt')));
   wrap.append(actions);
-  const close = modal(existing ? 'Edit appointment' : 'New appointment', wrap);
+  const close = modal(existing ? t('app.appt.editTitle') : t('app.appt.newTitle'), wrap);
 
   async function requestConfirm() {
     const cust = existing.customer || {};
-    if (!cust.email) return toast('This customer has no email on file to send a confirmation to.', true);
+    if (!cust.email) return toast(t('app.appt.noEmailConfirm'), true);
     const btn = wrap.querySelector('.btn.ghost');
-    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    if (btn) { btn.disabled = true; btn.textContent = t('app.common.sending'); }
     try {
       await API.appointments.requestConfirmation(existing.id);
       await API.appointments.sendConfirmationEmail(existing.id, 'confirm-request');
       close(); refresh();
-      modalInfo('Reminder to confirm sent', `A reminder to confirm has been emailed to ${cust.name || 'the customer'} at ${cust.email}. They'll be asked to confirm they're still coming.`);
-    } catch (e) { if (btn) { btn.disabled = false; btn.textContent = 'Request confirmation'; } errToast(e); }
+      modalInfo(t('app.appt.reminderSentTitle'), t('app.appt.reminderSentBody', { name: cust.name || t('app.appt.theCustomer'), email: cust.email }));
+    } catch (e) { if (btn) { btn.disabled = false; btn.textContent = t('app.appt.requestConfirm'); } errToast(e); }
   }
 
   async function save() {
@@ -869,7 +869,7 @@ async function openApptModal(day, refresh, existing) {
       };
       if (existing) { payload.status = f.status.value; await API.appointments.update(existing.id, payload); }
       else { payload.customer_id = f.customer.value || null; payload.source = 'manual'; await API.appointments.create(state.salon.id, payload); }
-      close(); refresh(); toast('Saved');
+      close(); refresh(); toast(t('app.toast.saved'));
     } catch (e) { errToast(e); }
   }
 }
@@ -877,22 +877,22 @@ async function openApptModal(day, refresh, existing) {
 // Cancellation dialog: reason (radios) + optional message to the customer.
 function openCancelDialog(existing, refresh, closeParent) {
   const cust = existing.customer || {};
-  const reasons = ['Customer requested', 'Customer rescheduled', 'No-show', 'Staff/salon unavailable', 'Other'];
+  const reasons = [t('app.cancel.reason.requested'), t('app.cancel.reason.rescheduled'), t('app.cancel.reason.noshow'), t('app.cancel.reason.unavailable'), t('app.cancel.reason.other')];
   let reason = reasons[0];
   const radios = el('div', { style: 'display:flex;flex-direction:column;gap:6px;margin-bottom:12px' },
     ...reasons.map((r) => el('label', { style: 'display:flex;align-items:center;gap:8px;font-weight:400;font-size:14px;cursor:pointer' },
       el('input', { type: 'radio', name: 'cxl-reason', value: r, style: 'width:auto', ...(r === reason ? { checked: true } : {}), onchange: () => (reason = r) }), r)));
-  const message = el('textarea', { rows: 3, placeholder: `Optional note to ${cust.name || 'the customer'} (e.g. sorry for the inconvenience)…` });
+  const message = el('textarea', { rows: 3, placeholder: t('app.cancel.notePh', { name: cust.name || t('app.appt.theCustomer') }) });
   const wrap = el('div', {},
-    el('p', { class: 'muted', style: 'margin-top:0;font-size:13px' }, `Cancelling ${cust.name || 'this appointment'}${cust.email ? ' · ' + cust.email : ''}.`),
-    field('Reason', radios),
-    field('Message to customer', message),
+    el('p', { class: 'muted', style: 'margin-top:0;font-size:13px' }, t('app.cancel.cancelling', { name: cust.name || t('app.cancel.thisAppt') }) + (cust.email ? ' · ' + cust.email : '') + '.'),
+    field(t('app.cancel.reason'), radios),
+    field(t('app.cancel.messageToCust'), message),
     el('div', { class: 'row', style: 'margin-top:6px' },
-      el('button', { class: 'btn ghost', onclick: () => close() }, 'Keep appointment'),
-      el('button', { class: 'btn danger', onclick: confirmCancel }, 'Cancel appointment')));
-  const close = modal('Cancel appointment', wrap);
+      el('button', { class: 'btn ghost', onclick: () => close() }, t('app.cancel.keep')),
+      el('button', { class: 'btn danger', onclick: confirmCancel }, t('app.appt.cancelAppt'))));
+  const close = modal(t('app.appt.cancelAppt'), wrap);
   async function confirmCancel() {
-    const note = `Cancelled — ${reason}.${message.value.trim() ? ' ' + message.value.trim() : ''}`;
+    const note = t('app.cancel.notePrefix') + reason + '.' + (message.value.trim() ? ' ' + message.value.trim() : '');
     const notes = existing.notes ? `${existing.notes}\n${note}` : note;
     try {
       await API.appointments.update(existing.id, { status: 'cancelled', notes });
@@ -902,7 +902,7 @@ function openCancelDialog(existing, refresh, closeParent) {
         try { await API.appointments.sendConfirmationEmail(existing.id, 'cancelled', { message: message.value.trim() }); emailed = true; } catch { /* non-fatal */ }
       }
       close(); if (closeParent) closeParent(); refresh();
-      toast(emailed ? 'Appointment cancelled — customer emailed' : 'Appointment cancelled');
+      toast(emailed ? t('app.cancel.cancelledEmailed') : t('app.cancel.cancelled'));
     } catch (e) { errToast(e); }
   }
 }
@@ -910,16 +910,16 @@ function openCancelDialog(existing, refresh, closeParent) {
 // Simple info dialog with an OK button.
 function modalInfo(title, message) {
   const wrap = el('div', {}, el('p', { style: 'margin-top:0' }, message),
-    el('button', { class: 'btn block', style: 'margin-top:6px', onclick: () => close() }, 'OK'));
+    el('button', { class: 'btn block', style: 'margin-top:6px', onclick: () => close() }, t('app.common.ok')));
   const close = modal(title, wrap);
 }
 function field(label, node) { return el('div', { class: 'field' }, el('label', {}, label), node); }
 
 // ---- CUSTOMERS ------------------------------------------------------------
 PAGES.customers = async (root) => {
-  const head = el('div', { class: 'page-head' }, el('h1', {}, 'Customers'),
-    el('button', { class: 'btn', onclick: () => openCustomerModal(() => navigate('customers')) }, '+ Add customer'));
-  const search = el('input', { placeholder: 'Search name, email, phone…', style: 'max-width:280px' });
+  const head = el('div', { class: 'page-head' }, el('h1', {}, t('app.cust.title')),
+    el('button', { class: 'btn', onclick: () => openCustomerModal(() => navigate('customers')) }, t('app.cust.add')));
+  const search = el('input', { placeholder: t('app.cust.searchPh'), style: 'max-width:280px' });
   root.append(head, el('div', { style: 'margin-bottom:14px' }, search));
   const body = el('div'); root.append(body);
   let t;
@@ -928,13 +928,13 @@ PAGES.customers = async (root) => {
     let list = [];
     try { list = await API.customers.list(state.salon.id, { search: search.value.trim() }); } catch (e) { return errToast(e); }
     body.innerHTML = '';
-    if (!list.length) return body.append(el('div', { class: 'card empty' }, 'No customers yet.'));
+    if (!list.length) return body.append(el('div', { class: 'card empty' }, t('app.cust.none')));
     const tb = el('tbody');
     list.forEach((c) => tb.append(el('tr', {},
       el('td', {}, c.name), el('td', {}, c.email || '—'), el('td', {}, c.phone || '—'),
-      el('td', {}, el('button', { class: 'btn ghost sm', onclick: () => openCustomerModal(load, c) }, 'Edit')))));
+      el('td', {}, el('button', { class: 'btn ghost sm', onclick: () => openCustomerModal(load, c) }, t('app.common.edit'))))));
     body.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
-      el('table', {}, el('thead', {}, el('tr', {}, ...['Name', 'Email', 'Phone', ''].map((h) => el('th', {}, h)))), tb)));
+      el('table', {}, el('thead', {}, el('tr', {}, ...[t('app.common.name'), t('app.common.email'), t('app.common.phone'), ''].map((h) => el('th', {}, h)))), tb)));
   }
   search.oninput = () => { clearTimeout(t); t = setTimeout(load, 250); };
   load();
@@ -942,98 +942,98 @@ PAGES.customers = async (root) => {
 function openCustomerModal(refresh, c) {
   const f = {};
   const wrap = el('div', {},
-    field('Name', f.name = el('input', { value: c?.name || '' })),
-    field('Email', f.email = el('input', { type: 'email', value: c?.email || '' })),
-    field('Phone', f.phone = el('input', { value: c?.phone || '' })),
-    field('Notes (private)', f.notes = el('textarea', { rows: 3 }, c?.notes || '')),
+    field(t('app.common.name'), f.name = el('input', { value: c?.name || '' })),
+    field(t('app.common.email'), f.email = el('input', { type: 'email', value: c?.email || '' })),
+    field(t('app.common.phone'), f.phone = el('input', { value: c?.phone || '' })),
+    field(t('app.cust.notesPrivate'), f.notes = el('textarea', { rows: 3 }, c?.notes || '')),
   );
   const actions = el('div', { class: 'row', style: 'margin-top:8px' });
   if (c) actions.append(el('button', { class: 'btn danger', onclick: async () => {
-    if (!confirm('Delete customer?')) return;
+    if (!confirm(t('app.cust.deleteConfirm'))) return;
     try { await API.customers.remove(c.id); close(); refresh(); } catch (e) { errToast(e); }
-  } }, 'Delete'));
-  actions.append(el('button', { class: 'btn', onclick: save }, 'Save'));
+  } }, t('app.common.delete')));
+  actions.append(el('button', { class: 'btn', onclick: save }, t('app.common.save')));
   wrap.append(actions);
-  const close = modal(c ? 'Edit customer' : 'Add customer', wrap);
+  const close = modal(c ? t('app.cust.editTitle') : t('app.cust.addTitle'), wrap);
   async function save() {
     const payload = { name: f.name.value.trim(), email: f.email.value.trim() || null, phone: f.phone.value.trim() || null, notes: f.notes.value.trim() || null };
-    if (!payload.name) return toast('Name is required', true);
-    try { c ? await API.customers.update(c.id, payload) : await API.customers.create(state.salon.id, payload); close(); refresh(); toast('Saved'); }
+    if (!payload.name) return toast(t('app.common.nameRequired'), true);
+    try { c ? await API.customers.update(c.id, payload) : await API.customers.create(state.salon.id, payload); close(); refresh(); toast(t('app.toast.saved')); }
     catch (e) { errToast(e); }
   }
 }
 
 // ---- SERVICES -------------------------------------------------------------
 PAGES.services = async (root) => {
-  root.append(el('div', { class: 'page-head' }, el('h1', {}, 'Services'),
-    el('button', { class: 'btn', onclick: () => openServiceModal(() => navigate('services')) }, '+ Add service')));
+  root.append(el('div', { class: 'page-head' }, el('h1', {}, t('app.svc.title')),
+    el('button', { class: 'btn', onclick: () => openServiceModal(() => navigate('services')) }, t('app.svc.add'))));
   let list = [];
   try { list = await API.services.list(state.salon.id); } catch (e) { return errToast(e); }
-  if (!list.length) return root.append(el('div', { class: 'card empty' }, 'No services yet. Add the things clients can book.'));
+  if (!list.length) return root.append(el('div', { class: 'card empty' }, t('app.svc.none')));
   const tb = el('tbody');
   list.forEach((s) => tb.append(el('tr', {},
     el('td', {}, s.name),
-    el('td', {}, `${s.duration_min} min`),
+    el('td', {}, t('app.common.minutes', { n: s.duration_min })),
     el('td', {}, money(s.price, state.salon.currency)),
-    el('td', {}, s.bookable_online ? statusPill('confirmed') && el('span', { class: 'pill', style: 'background:#E2F6F2;color:var(--mint)' }, 'online') : el('span', { class: 'pill muted', style: 'background:var(--paper-dim)' }, 'in-house')),
-    el('td', {}, el('button', { class: 'btn ghost sm', onclick: () => openServiceModal(() => navigate('services'), s) }, 'Edit')))));
+    el('td', {}, s.bookable_online ? statusPill('confirmed') && el('span', { class: 'pill', style: 'background:#E2F6F2;color:var(--mint)' }, t('app.common.online')) : el('span', { class: 'pill muted', style: 'background:var(--paper-dim)' }, t('app.svc.inhouse'))),
+    el('td', {}, el('button', { class: 'btn ghost sm', onclick: () => openServiceModal(() => navigate('services'), s) }, t('app.common.edit'))))));
   root.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
-    el('table', {}, el('thead', {}, el('tr', {}, ...['Service', 'Duration', 'Price', 'Booking', ''].map((h) => el('th', {}, h)))), tb)));
+    el('table', {}, el('thead', {}, el('tr', {}, ...[t('app.common.service'), t('app.svc.thDuration'), t('app.common.price'), t('app.svc.thBooking'), ''].map((h) => el('th', {}, h)))), tb)));
 };
 function openServiceModal(refresh, s) {
   const f = {};
   const wrap = el('div', {},
-    field('Name', f.name = el('input', { value: s?.name || '' })),
-    field('Description', f.desc = el('textarea', { rows: 2 }, s?.description || '')),
+    field(t('app.common.name'), f.name = el('input', { value: s?.name || '' })),
+    field(t('app.common.description'), f.desc = el('textarea', { rows: 2 }, s?.description || '')),
     el('div', { class: 'row' },
-      field('Duration (min)', f.dur = el('input', { type: 'number', min: '5', step: '5', value: s?.duration_min ?? 30 })),
-      field('Buffer after (min)', f.buf = el('input', { type: 'number', min: '0', step: '5', value: s?.buffer_min ?? 0 })),
-      field('Price', f.price = el('input', { type: 'number', min: '0', step: '0.01', value: s?.price ?? 0 })),
+      field(t('app.svc.durationMin'), f.dur = el('input', { type: 'number', min: '5', step: '5', value: s?.duration_min ?? 30 })),
+      field(t('app.svc.bufferMin'), f.buf = el('input', { type: 'number', min: '0', step: '5', value: s?.buffer_min ?? 0 })),
+      field(t('app.common.price'), f.price = el('input', { type: 'number', min: '0', step: '0.01', value: s?.price ?? 0 })),
     ),
     el('label', { style: 'display:flex;align-items:center;gap:8px;font-weight:500' },
-      f.online = el('input', { type: 'checkbox', style: 'width:auto', ...(s ? (s.bookable_online ? { checked: true } : {}) : { checked: true }) }), 'Available to book online'),
+      f.online = el('input', { type: 'checkbox', style: 'width:auto', ...(s ? (s.bookable_online ? { checked: true } : {}) : { checked: true }) }), t('app.svc.availableOnline')),
     el('label', { style: 'display:flex;align-items:center;gap:8px;font-weight:500;margin-top:8px' },
-      f.active = el('input', { type: 'checkbox', style: 'width:auto', ...(s ? (s.is_active ? { checked: true } : {}) : { checked: true }) }), 'Active'),
+      f.active = el('input', { type: 'checkbox', style: 'width:auto', ...(s ? (s.is_active ? { checked: true } : {}) : { checked: true }) }), t('app.svc.active')),
   );
   const actions = el('div', { class: 'row', style: 'margin-top:14px' });
   if (s) actions.append(el('button', { class: 'btn danger', onclick: async () => {
-    if (!confirm('Delete service?')) return;
+    if (!confirm(t('app.svc.deleteConfirm'))) return;
     try { await API.services.remove(s.id); close(); refresh(); } catch (e) { errToast(e); }
-  } }, 'Delete'));
-  actions.append(el('button', { class: 'btn', onclick: save }, 'Save'));
+  } }, t('app.common.delete')));
+  actions.append(el('button', { class: 'btn', onclick: save }, t('app.common.save')));
   wrap.append(actions);
-  const close = modal(s ? 'Edit service' : 'Add service', wrap);
+  const close = modal(s ? t('app.svc.editTitle') : t('app.svc.addTitle'), wrap);
   async function save() {
     const payload = {
       name: f.name.value.trim(), description: f.desc.value.trim() || null,
       duration_min: parseInt(f.dur.value, 10) || 30, buffer_min: parseInt(f.buf.value, 10) || 0,
       price: parseFloat(f.price.value) || 0, bookable_online: f.online.checked, is_active: f.active.checked,
     };
-    if (!payload.name) return toast('Name is required', true);
-    try { s ? await API.services.update(s.id, payload) : await API.services.create(state.salon.id, payload); close(); refresh(); toast('Saved'); }
+    if (!payload.name) return toast(t('app.common.nameRequired'), true);
+    try { s ? await API.services.update(s.id, payload) : await API.services.create(state.salon.id, payload); close(); refresh(); toast(t('app.toast.saved')); }
     catch (e) { errToast(e); }
   }
 }
 
 // ---- STAFF ----------------------------------------------------------------
 PAGES.staff = async (root) => {
-  root.append(el('div', { class: 'page-head' }, el('h1', {}, 'Staff'),
+  root.append(el('div', { class: 'page-head' }, el('h1', {}, t('app.staff.title')),
     el('div', { style: 'display:flex;gap:8px' },
-      el('button', { class: 'btn ghost', onclick: () => openLinkEmployee(() => navigate('staff')) }, '+ Link employee'),
-      el('button', { class: 'btn', onclick: () => openStaffModal(() => navigate('staff')) }, '+ Add staff'))));
+      el('button', { class: 'btn ghost', onclick: () => openLinkEmployee(() => navigate('staff')) }, t('app.staff.linkEmp')),
+      el('button', { class: 'btn', onclick: () => openStaffModal(() => navigate('staff')) }, t('app.staff.add')))));
   let list = [];
   try { list = await API.staff.list(state.salon.id); } catch (e) { return errToast(e); }
-  if (!list.length) return root.append(el('div', { class: 'card empty' }, 'No staff yet. Add the people who take appointments.'));
+  if (!list.length) return root.append(el('div', { class: 'card empty' }, t('app.staff.none')));
   const tb = el('tbody');
   list.forEach((s) => tb.append(el('tr', {},
     el('td', {}, s.name), el('td', {}, s.title || '—'),
-    el('td', {}, s.accepts_online_booking ? el('span', { class: 'pill', style: 'background:#E2F6F2;color:var(--mint)' }, 'online') : el('span', { class: 'pill', style: 'background:var(--paper-dim)' }, 'off')),
+    el('td', {}, s.accepts_online_booking ? el('span', { class: 'pill', style: 'background:#E2F6F2;color:var(--mint)' }, t('app.common.online')) : el('span', { class: 'pill', style: 'background:var(--paper-dim)' }, t('app.staff.off'))),
     el('td', {},
-      el('button', { class: 'btn ghost sm', onclick: () => openHoursModal(s, () => navigate('staff')) }, 'Hours'),
+      el('button', { class: 'btn ghost sm', onclick: () => openHoursModal(s, () => navigate('staff')) }, t('app.staff.hours')),
       ' ',
-      el('button', { class: 'btn ghost sm', onclick: () => openStaffModal(() => navigate('staff'), s) }, 'Edit')))));
+      el('button', { class: 'btn ghost sm', onclick: () => openStaffModal(() => navigate('staff'), s) }, t('app.common.edit'))))));
   root.append(el('div', { class: 'card', style: 'padding:0;overflow:auto' },
-    el('table', {}, el('thead', {}, el('tr', {}, ...['Name', 'Title', 'Online', ''].map((h) => el('th', {}, h)))), tb)));
+    el('table', {}, el('thead', {}, el('tr', {}, ...[t('app.common.name'), t('app.common.jobTitle'), t('app.staff.thOnline'), ''].map((h) => el('th', {}, h)))), tb)));
 };
 async function openStaffModal(refresh, s) {
   const allServices = await API.services.list(state.salon.id);
@@ -1042,34 +1042,34 @@ async function openStaffModal(refresh, s) {
   const svcChecks = allServices.map((sv) => el('label', { style: 'display:flex;align-items:center;gap:8px;font-weight:500;margin-bottom:4px' },
     el('input', { type: 'checkbox', value: sv.id, style: 'width:auto', ...(assigned.has(sv.id) ? { checked: true } : {}) }), sv.name));
   const wrap = el('div', {},
-    field('Name', f.name = el('input', { value: s?.name || '' })),
-    field('Title', f.title = el('input', { value: s?.title || '', placeholder: 'Senior Stylist' })),
+    field(t('app.common.name'), f.name = el('input', { value: s?.name || '' })),
+    field(t('app.common.jobTitle'), f.title = el('input', { value: s?.title || '', placeholder: t('app.staff.titlePh') })),
     el('div', { class: 'row' },
-      field('Calendar colour', f.color = el('input', { type: 'color', value: s?.color || '#6C4AB6' })),
-      el('div', { class: 'field' }, el('label', {}, 'Online booking'),
+      field(t('app.staff.color'), f.color = el('input', { type: 'color', value: s?.color || '#6C4AB6' })),
+      el('div', { class: 'field' }, el('label', {}, t('app.staff.onlineBooking')),
         el('label', { style: 'display:flex;align-items:center;gap:8px;font-weight:500;padding-top:8px' },
-          f.online = el('input', { type: 'checkbox', style: 'width:auto', ...(s ? (s.accepts_online_booking ? { checked: true } : {}) : { checked: true }) }), 'Accepts')),
+          f.online = el('input', { type: 'checkbox', style: 'width:auto', ...(s ? (s.accepts_online_booking ? { checked: true } : {}) : { checked: true }) }), t('app.staff.accepts'))),
     ),
-    el('label', {}, 'Services this person performs'),
+    el('label', {}, t('app.staff.servicesPerformed')),
     el('div', { style: 'max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:10px;margin-bottom:8px' },
-      allServices.length ? svcChecks : el('span', { class: 'muted' }, 'Add services first.')),
+      allServices.length ? svcChecks : el('span', { class: 'muted' }, t('app.staff.addSvcFirst'))),
   );
   const actions = el('div', { class: 'row', style: 'margin-top:8px' });
   if (s) actions.append(el('button', { class: 'btn danger', onclick: async () => {
-    if (!confirm('Remove staff member?')) return;
+    if (!confirm(t('app.staff.removeConfirm'))) return;
     try { await API.staff.remove(s.id); close(); refresh(); } catch (e) { errToast(e); }
-  } }, 'Remove'));
-  actions.append(el('button', { class: 'btn', onclick: save }, 'Save'));
+  } }, t('app.staff.remove')));
+  actions.append(el('button', { class: 'btn', onclick: save }, t('app.common.save')));
   wrap.append(actions);
-  const close = modal(s ? 'Edit staff' : 'Add staff', wrap);
+  const close = modal(s ? t('app.staff.editTitle') : t('app.staff.addTitle'), wrap);
   async function save() {
     const payload = { name: f.name.value.trim(), title: f.title.value.trim() || null, color: f.color.value, accepts_online_booking: f.online.checked };
-    if (!payload.name) return toast('Name is required', true);
+    if (!payload.name) return toast(t('app.common.nameRequired'), true);
     try {
       const saved = s ? await API.staff.update(s.id, payload) : await API.staff.create(state.salon.id, payload);
       const ids = $$('input[type=checkbox]', wrap).filter((c) => c.value && c.checked).map((c) => c.value);
       await API.staff.setServices(saved.id, ids);
-      close(); refresh(); toast('Saved');
+      close(); refresh(); toast(t('app.toast.saved'));
     } catch (e) { errToast(e); }
   }
 }
@@ -1084,36 +1084,36 @@ async function openHoursModal(s, refresh) {
     return { dow, on, start, end, node: el('div', { style: 'display:grid;grid-template-columns:30px 56px 1fr 1fr;gap:8px;align-items:center;margin-bottom:6px' },
       on, el('span', { style: 'font-weight:600;font-size:13px' }, name), start, end) };
   });
-  const wrap = el('div', {}, el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, `Weekly hours for ${s.name}. These drive online availability.`),
-    ...rows.map((r) => r.node), el('button', { class: 'btn block', style: 'margin-top:10px', onclick: save }, 'Save hours'));
-  const close = modal(`Working hours — ${s.name}`, wrap);
+  const wrap = el('div', {}, el('p', { class: 'muted', style: 'font-size:13px;margin-top:0' }, t('app.staff.weeklyHours', { name: s.name })),
+    ...rows.map((r) => r.node), el('button', { class: 'btn block', style: 'margin-top:10px', onclick: save }, t('app.staff.saveHours')));
+  const close = modal(t('app.staff.hoursTitle', { name: s.name }), wrap);
   async function save() {
     const payload = rows.filter((r) => r.on.checked).map((r) => ({ dow: r.dow, start_time: r.start.value, end_time: r.end.value }));
-    if (payload.some((p) => p.end_time <= p.start_time)) return toast('End time must be after start time', true);
-    try { await API.hours.setForStaff(state.salon.id, s.id, payload); close(); toast('Hours saved'); if (refresh) refresh(); }
+    if (payload.some((p) => p.end_time <= p.start_time)) return toast(t('app.staff.endAfterStart'), true);
+    try { await API.hours.setForStaff(state.salon.id, s.id, payload); close(); toast(t('app.staff.hoursSaved')); if (refresh) refresh(); }
     catch (e) { errToast(e); }
   }
 }
 
 function openLinkEmployee(refresh) {
   const f = {};
-  const salonName = state.salon?.name || 'our salon';
+  const salonName = state.salon?.name || t('app.staff.ourSalon');
   const signupUrl = `${location.origin}/`;
-  const msg = `Join ${salonName} on Glowup Book! Create your employee account at ${signupUrl} (choose "I'm an employee"), then I'll add you to the team.`;
+  const msg = t('app.staff.inviteMsg', { salon: salonName, url: signupUrl });
   const isEmail = (v) => /@/.test(v || '');
   const wrap = el('div', {},
-    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Already registered? Link them by the email or phone they used. Not yet? Send an invite to sign up.'),
-    field('Employee email or phone', f.id = el('input', { placeholder: 'name@email.com or (555) 123-4567' })),
-    field('Display name (optional)', f.name = el('input', { placeholder: 'Shown on the calendar' })),
-    el('button', { class: 'btn block', style: 'margin-bottom:12px', onclick: link }, 'Link existing account'),
-    el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:6px' }, 'Or invite them to register:'),
+    el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, t('app.staff.linkBlurb')),
+    field(t('app.staff.empEmailPhone'), f.id = el('input', { placeholder: t('app.staff.empIdPh') })),
+    field(t('app.staff.displayName'), f.name = el('input', { placeholder: t('app.staff.displayNamePh') })),
+    el('button', { class: 'btn block', style: 'margin-bottom:12px', onclick: link }, t('app.staff.linkExisting')),
+    el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:6px' }, t('app.staff.orInvite')),
     el('div', { class: 'row' },
-      el('button', { class: 'btn ghost', onclick: () => { const to = isEmail(f.id.value) ? f.id.value.trim() : ''; window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent('Join ' + salonName + ' on Glowup Book')}&body=${encodeURIComponent(msg)}`; } }, '✉ Invite by email'),
-      el('button', { class: 'btn ghost', onclick: () => { const to = !isEmail(f.id.value) ? (f.id.value || '').replace(/[^0-9+]/g, '') : ''; window.location.href = `sms:${to}?&body=${encodeURIComponent(msg)}`; } }, '💬 Invite by text')));
-  const close = modal('Add an employee', wrap);
+      el('button', { class: 'btn ghost', onclick: () => { const to = isEmail(f.id.value) ? f.id.value.trim() : ''; window.location.href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(t('app.staff.inviteSubject', { salon: salonName }))}&body=${encodeURIComponent(msg)}`; } }, t('app.staff.inviteEmail')),
+      el('button', { class: 'btn ghost', onclick: () => { const to = !isEmail(f.id.value) ? (f.id.value || '').replace(/[^0-9+]/g, '') : ''; window.location.href = `sms:${to}?&body=${encodeURIComponent(msg)}`; } }, t('app.staff.inviteText'))));
+  const close = modal(t('app.staff.addEmpTitle'), wrap);
   async function link() {
-    if (!f.id.value.trim()) return toast('Enter their email or phone', true);
-    try { await API.staff.linkEmployee(state.salon.id, f.id.value.trim(), f.name.value.trim()); close(); refresh(); toast('Employee linked'); }
+    if (!f.id.value.trim()) return toast(t('app.staff.enterEmailPhone'), true);
+    try { await API.staff.linkEmployee(state.salon.id, f.id.value.trim(), f.name.value.trim()); close(); refresh(); toast(t('app.staff.empLinked')); }
     catch (e) { errToast(e); }
   }
 }
@@ -1121,40 +1121,40 @@ function openLinkEmployee(refresh) {
 // ---- SETTINGS -------------------------------------------------------------
 PAGES.settings = async (root) => {
   const s = state.salon;
-  root.append(el('div', { class: 'page-head' }, el('h1', {}, 'Settings')));
+  root.append(el('div', { class: 'page-head' }, el('h1', {}, t('app.set.title'))));
   const link = `${location.origin}/${s.slug}`;
   const f = {};
   const card = el('div', { class: 'card', style: 'max-width:560px' },
     el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px' },
-      el('div', {}, el('strong', {}, 'Booking page'), el('div', { class: 'muted', style: 'font-size:13px' }, link)),
+      el('div', {}, el('strong', {}, t('app.set.bookingPage')), el('div', { class: 'muted', style: 'font-size:13px' }, link)),
       el('div', {},
-        el('span', { class: 'pill', style: `background:${s.is_published ? '#E2F6F2' : 'var(--paper-dim)'};color:${s.is_published ? 'var(--mint)' : 'var(--grey)'};margin-right:8px` }, s.is_published ? 'Live' : 'Offline'),
-        el('button', { class: 'btn sm', onclick: togglePublish }, s.is_published ? 'Take offline' : 'Publish'))),
-    field('Business name', f.name = el('input', { value: s.name || '' })),
-    field('About', f.about = el('textarea', { rows: 3 }, s.about || '')),
+        el('span', { class: 'pill', style: `background:${s.is_published ? '#E2F6F2' : 'var(--paper-dim)'};color:${s.is_published ? 'var(--mint)' : 'var(--grey)'};margin-right:8px` }, s.is_published ? t('app.common.live') : t('app.set.offline')),
+        el('button', { class: 'btn sm', onclick: togglePublish }, s.is_published ? t('app.set.takeOffline') : t('app.common.publish')))),
+    field(t('app.set.bizName'), f.name = el('input', { value: s.name || '' })),
+    field(t('app.set.about'), f.about = el('textarea', { rows: 3 }, s.about || '')),
     el('div', { class: 'row' },
-      field('Phone', f.phone = el('input', { value: s.phone || '' })),
-      field('Email', f.email = el('input', { value: s.email || '' })),
+      field(t('app.common.phone'), f.phone = el('input', { value: s.phone || '' })),
+      field(t('app.common.email'), f.email = el('input', { value: s.email || '' })),
     ),
-    field('Address', f.address = el('input', { value: s.address || '' })),
+    field(t('app.set.address'), f.address = el('input', { value: s.address || '' })),
     el('div', { class: 'row' },
-      field('Timezone', f.tz = el('input', { value: s.timezone || 'UTC' })),
-      field('Currency', f.cur = el('input', { value: s.currency || 'USD' })),
+      field(t('app.set.timezone'), f.tz = el('input', { value: s.timezone || 'UTC' })),
+      field(t('app.set.currency'), f.cur = el('input', { value: s.currency || 'USD' })),
     ),
-    el('h3', { style: 'font-size:16px;margin:6px 0 10px' }, 'Social links'),
+    el('h3', { style: 'font-size:16px;margin:6px 0 10px' }, t('app.set.socialLinks')),
     el('div', { class: 'row' },
-      field('Instagram', f.instagram = el('input', { value: s.instagram || '', placeholder: '@yoursalon or URL' })),
-      field('TikTok', f.tiktok = el('input', { value: s.tiktok || '', placeholder: '@yoursalon or URL' })),
+      field('Instagram', f.instagram = el('input', { value: s.instagram || '', placeholder: t('app.set.socialPh') })),
+      field('TikTok', f.tiktok = el('input', { value: s.tiktok || '', placeholder: t('app.set.socialPh') })),
     ),
     el('div', { class: 'row' },
-      field('Facebook', f.facebook = el('input', { value: s.facebook || '', placeholder: 'page name or URL' })),
-      field('Website', f.website = el('input', { value: s.website || '', placeholder: 'https://…' })),
+      field('Facebook', f.facebook = el('input', { value: s.facebook || '', placeholder: t('app.set.fbPh') })),
+      field(t('app.set.website'), f.website = el('input', { value: s.website || '', placeholder: 'https://…' })),
     ),
-    el('button', { class: 'btn', onclick: save }, 'Save settings'),
+    el('button', { class: 'btn', onclick: save }, t('app.set.save')),
   );
   root.append(card);
   async function save() {
-    if (f.tz.value.trim() && !validTz(f.tz.value.trim())) return toast('Enter a valid timezone, e.g. America/New_York', true);
+    if (f.tz.value.trim() && !validTz(f.tz.value.trim())) return toast(t('app.common.invalidTz'), true);
     try {
       state.salon = await API.salons.update(s.id, {
         name: f.name.value.trim(), about: f.about.value.trim() || null, phone: f.phone.value.trim() || null,
@@ -1163,11 +1163,11 @@ PAGES.settings = async (root) => {
         instagram: f.instagram.value.trim() || null, tiktok: f.tiktok.value.trim() || null,
         facebook: f.facebook.value.trim() || null, website: f.website.value.trim() || null,
       });
-      toast('Saved'); navigate('settings');
+      toast(t('app.toast.saved')); navigate('settings');
     } catch (e) { errToast(e); }
   }
   async function togglePublish() {
-    try { state.salon = await API.salons.update(s.id, { is_published: !s.is_published }); toast(state.salon.is_published ? 'Booking page is live' : 'Booking page offline'); navigate('settings'); }
+    try { state.salon = await API.salons.update(s.id, { is_published: !s.is_published }); toast(state.salon.is_published ? t('app.set.pageLive') : t('app.set.pageOffline')); navigate('settings'); }
     catch (e) { errToast(e); }
   }
 };
@@ -1175,7 +1175,7 @@ PAGES.settings = async (root) => {
 // ===========================================================================
 // PUBLIC DIRECTORY (homepage at /)
 // ===========================================================================
-const TYPE_LABELS = { hair: 'Hair salon', barber: 'Barber shop', nails: 'Nail studio', beauty: 'Beauty & spa' };
+const TYPE_LABELS = { hair: t('app.type.hair'), barber: t('app.type.barber'), nails: t('app.type.nails'), beauty: t('app.type.beauty') };
 
 async function startDirectory() {
   show('#screen-directory');
@@ -1194,19 +1194,19 @@ async function startDirectory() {
     grid.innerHTML = '';
     if (!salons.length) {
       grid.append(el('div', { class: 'empty', style: 'grid-column:1/-1' },
-        (q.value.trim() || type.value) ? 'No salons match your search.' : 'No salons are listed yet — be the first to add yours!'));
+        (q.value.trim() || type.value) ? t('app.dir.noMatch') : t('app.dir.noneListed')));
       return;
     }
     salons.forEach((s) => grid.append(salonCard(s)));
     if (salons.length >= 60) {
       grid.append(el('div', { class: 'muted', style: 'grid-column:1/-1;text-align:center;padding:18px;font-size:14px' },
-        'Showing the first 60 salons — search by name or city, or pick a type, to narrow it down.'));
+        t('app.dir.first60')));
     }
   }
 
   async function load() {
-    if (!API.enabled) { grid.innerHTML = ''; grid.append(el('div', { class: 'banner' }, 'Directory not connected to a backend yet.')); return; }
-    if (view === 'list') grid.innerHTML = '<p class="muted">Loading salons…</p>';
+    if (!API.enabled) { grid.innerHTML = ''; grid.append(el('div', { class: 'banner' }, t('app.dir.notConnected'))); return; }
+    if (view === 'list') grid.innerHTML = '<p class="muted">' + t('app.dir.loadingSalons') + '</p>';
     try { lastResults = await API.storefront.directory({ search: q.value.trim(), type: type.value }); }
     catch (e) { grid.innerHTML = ''; return errToast(e); }
     if (view === 'list') renderList(lastResults); else renderMap(mapEl, lastResults);
@@ -1247,7 +1247,7 @@ async function renderGallery(salonsForLink) {
   // Real employee/portfolio photos first.
   try {
     const photos = await API.storefront.recentPortfolio(18);
-    photos.forEach((p) => { if (p.salon?.slug) tiles.push({ img: p.url, slug: p.salon.slug, label: p.salon.name, sub: p.caption || 'Recent work' }); });
+    photos.forEach((p) => { if (p.salon?.slug) tiles.push({ img: p.url, slug: p.salon.slug, label: p.salon.name, sub: p.caption || t('app.dir.recentWork') }); });
   } catch { /* */ }
   // Pad with themed inspiration tiles linked to real salons.
   if (tiles.length < 12 && salonsForLink?.length) {
@@ -1255,7 +1255,7 @@ async function renderGallery(salonsForLink) {
     for (const s of salonsForLink) {
       if (tiles.length >= 12) break;
       const imgs = SHOWCASE[s.business_type] || SHOWCASE.hair;
-      tiles.push({ img: showImg(imgs[i % imgs.length]), slug: s.slug, label: s.name, sub: TYPE_LABELS[s.business_type] || 'Salon' });
+      tiles.push({ img: showImg(imgs[i % imgs.length]), slug: s.slug, label: s.name, sub: TYPE_LABELS[s.business_type] || t('app.common.salon') });
       i++;
     }
   }
@@ -1278,7 +1278,7 @@ function ensureLeaflet() {
     const js = document.createElement('script');
     js.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
     js.onload = () => resolve(window.L);
-    js.onerror = () => reject(new Error('Could not load the map library.'));
+    js.onerror = () => reject(new Error(t('app.map.loadError')));
     document.head.append(js);
   });
   return _leafletPromise;
@@ -1314,7 +1314,7 @@ async function renderMap(container, salons) {
   // If results have no coordinates, tell the user rather than showing a blank map.
   const note = container.parentElement?.querySelector('.map-note');
   if (!pts.length && missing) {
-    if (!note) container.insertAdjacentHTML('afterend', `<div class="map-note banner" style="margin-top:10px">These salons don't have map locations yet. Try the <b>List</b> view.</div>`);
+    if (!note) container.insertAdjacentHTML('afterend', `<div class="map-note banner" style="margin-top:10px">${t('app.map.noLocations')}</div>`);
   } else if (note) { note.remove(); }
 }
 
@@ -1327,14 +1327,14 @@ async function renderDirAuth() {
   if (API.enabled) { try { user = await API.auth.currentUser(); if (user) prof = await API.auth.profile(); } catch { /* offline */ } }
   if (user) {
     box.append(
-      el('button', { class: 'btn ghost sm', onclick: () => openCustomerProfile() }, '👤 My account'),
+      el('button', { class: 'btn ghost sm', onclick: () => openCustomerProfile() }, t('app.dir.myAccount')),
       el('span', { class: 'who' }, prof?.full_name || user.email),
-      el('button', { class: 'btn ghost sm', onclick: async () => { await API.auth.signOut(); location.reload(); } }, 'Sign out'),
+      el('button', { class: 'btn ghost sm', onclick: async () => { await API.auth.signOut(); location.reload(); } }, t('app.common.signout')),
     );
   } else {
     box.append(
-      el('button', { class: 'btn sm', onclick: () => openCustomerAuth(renderDirAuth) }, 'Log in / Sign up'),
-      el('a', { class: 'btn ghost sm', href: '/app' }, 'For salon owners →'),
+      el('button', { class: 'btn sm', onclick: () => openCustomerAuth(renderDirAuth) }, t('app.dir.loginSignup')),
+      el('a', { class: 'btn ghost sm', href: '/app' }, t('app.dir.forOwners')),
     );
   }
 }
@@ -1342,21 +1342,21 @@ async function renderDirAuth() {
 function openCustomerAuth(onDone) {
   let mode = 'login', role = 'customer';
   const f = {};
-  const nameField = field('Your name', f.name = el('input', { autocomplete: 'name' }));
-  const submitBtn = el('button', { class: 'btn block', onclick: submit }, 'Log in');
-  const tabLogin = el('button', { class: 'on' }, 'Log in');
-  const tabSignup = el('button', {}, 'Sign up');
+  const nameField = field(t('app.dir.yourName'), f.name = el('input', { autocomplete: 'name' }));
+  const submitBtn = el('button', { class: 'btn block', onclick: submit }, t('app.auth.login'));
+  const tabLogin = el('button', { class: 'on' }, t('app.auth.login'));
+  const tabSignup = el('button', {}, t('app.auth.signup'));
   const consent = consentCheckbox();
   // role chooser (signup only): customer vs employee
-  const roleCust = el('button', { class: 'on' }, "I'm a customer");
-  const roleEmp = el('button', {}, "I'm an employee");
-  const roleRow = field('I want to', el('div', { class: 'tabs' }, roleCust, roleEmp));
-  const blurb = el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, 'Create a free account to book and manage your appointments at any salon.');
+  const roleCust = el('button', { class: 'on' }, t('app.dir.imCustomer'));
+  const roleEmp = el('button', {}, t('app.dir.imEmployee'));
+  const roleRow = field(t('app.dir.iWantTo'), el('div', { class: 'tabs' }, roleCust, roleEmp));
+  const blurb = el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, t('app.dir.custBlurb'));
   const wrap = el('div', {}, blurb, el('div', { class: 'tabs' }, tabLogin, tabSignup), roleRow, nameField,
-    field('Email', f.email = el('input', { type: 'email', autocomplete: 'email' })),
-    field('Password', f.pass = el('input', { type: 'password' })), consent, submitBtn);
+    field(t('app.common.email'), f.email = el('input', { type: 'email', autocomplete: 'email' })),
+    field(t('app.common.password'), f.pass = el('input', { type: 'password' })), consent, submitBtn);
   const setRole = (r) => { role = r; roleCust.classList.toggle('on', r === 'customer'); roleEmp.classList.toggle('on', r === 'staff');
-    blurb.textContent = r === 'staff' ? 'Create your employee account, then ask your salon admin to add you by your email.' : 'Create a free account to book and manage your appointments at any salon.'; };
+    blurb.textContent = r === 'staff' ? t('app.dir.empBlurb') : t('app.dir.custBlurb'); };
   roleCust.onclick = () => setRole('customer'); roleEmp.onclick = () => setRole('staff');
   const setMode = (m) => {
     mode = m;
@@ -1364,24 +1364,24 @@ function openCustomerAuth(onDone) {
     roleRow.classList.toggle('hidden', m === 'login');
     nameField.classList.toggle('hidden', m === 'login');
     consent.classList.toggle('hidden', m === 'login');
-    submitBtn.textContent = m === 'login' ? 'Log in' : 'Create account';
+    submitBtn.textContent = m === 'login' ? t('app.auth.login') : t('app.auth.createAccount');
   };
   tabLogin.onclick = () => setMode('login'); tabSignup.onclick = () => setMode('signup');
   setRole('customer'); setMode('login');
-  const close = modal('Your account', wrap);
+  const close = modal(t('app.dir.yourAccount'), wrap);
   async function submit() {
     const email = f.email.value.trim(), password = f.pass.value;
-    if (!email || !password) return toast('Enter email and password', true);
+    if (!email || !password) return toast(t('app.auth.enterEmailPass'), true);
     if (mode === 'signup' && !agreed(consent)) return;
     try {
       if (mode === 'signup') {
         const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role });
-        if (!res?.session) { showEmailConfirmNotice(wrap, email); toast('Check your email to confirm.'); return; }
+        if (!res?.session) { showEmailConfirmNotice(wrap, email); toast(t('app.auth.checkEmail')); return; }
         close();
         if (role === 'staff') { location.href = '/app'; return; }   // employee → their profile
       } else {
         await API.auth.signIn({ email, password });
-        toast('Welcome back!');
+        toast(t('app.dir.welcomeBack'));
         close();
       }
       // a logged-in employee/owner/admin shouldn't stay on the directory account UI
@@ -1389,7 +1389,7 @@ function openCustomerAuth(onDone) {
       if (prof && prof.role !== 'customer') { location.href = '/app'; return; }
       if (onDone) onDone();
     } catch (e) {
-      if (/confirm/i.test(e?.message || '')) { showEmailConfirmNotice(wrap, email, { prefix: 'Please confirm your email first.' }); return; }
+      if (/confirm/i.test(e?.message || '')) { showEmailConfirmNotice(wrap, email, { prefix: t('app.auth.confirmFirst') }); return; }
       errToast(e);
     }
   }
@@ -1400,34 +1400,34 @@ async function openCustomerProfile() {
   const tabsBar = el('div', { class: 'tabs' });
   const content = el('div', { style: 'margin-top:8px' });
   const wrap = el('div', {}, tabsBar, content);
-  const close = modal('My account', wrap, { wide: true });
+  const close = modal(t('app.dir.myAccountTitle'), wrap, { wide: true });
   const tabs = { Bookings: tabBookings, Favorites: tabFavorites, Reviews: tabReviews, Info: tabInfo };
   const btns = {};
   Object.keys(tabs).forEach((name) => {
-    const b = el('button', { class: name === 'Bookings' ? 'on' : '', onclick: () => select(name) }, name);
+    const b = el('button', { class: name === 'Bookings' ? 'on' : '', onclick: () => select(name) }, t('app.profile.tab.' + name.toLowerCase()));
     btns[name] = b; tabsBar.append(b);
   });
-  function select(name) { Object.entries(btns).forEach(([n, b]) => b.classList.toggle('on', n === name)); content.innerHTML = '<p class="muted">Loading…</p>'; tabs[name](); }
+  function select(name) { Object.entries(btns).forEach(([n, b]) => b.classList.toggle('on', n === name)); content.innerHTML = '<p class="muted">' + t('app.common.loading') + '</p>'; tabs[name](); }
 
   async function tabBookings() {
     let list = [], rated = {};
     try { [list, rated] = await Promise.all([API.customer.myBookings(), API.customer.reviewsByAppointment()]); }
     catch (e) { content.innerHTML = ''; return content.append(el('div', { class: 'banner' }, e.message)); }
     content.innerHTML = '';
-    if (!list.length) return content.append(el('div', { class: 'empty' }, 'No bookings yet. Browse salons and book your first appointment!'));
+    if (!list.length) return content.append(el('div', { class: 'empty' }, t('app.profile.noBookings')));
     list.forEach((b) => {
       const past = new Date(b.starts_at) < new Date();
       const upcoming = !past && b.status !== 'cancelled';
       const actions = el('div', { style: 'display:flex;gap:6px;align-items:center' });
-      if (upcoming && b.status === 'booked') actions.append(el('button', { class: 'btn sm', onclick: async () => { try { await API.customer.confirm(b.id); select('Bookings'); toast('Confirmed — see you there!'); } catch (e) { errToast(e); } } }, 'Confirm'));
-      if (upcoming) actions.append(el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm('Cancel this booking?')) return; try { await API.customer.cancel(b.id); select('Bookings'); toast('Cancelled'); } catch (e) { errToast(e); } } }, 'Cancel'));
+      if (upcoming && b.status === 'booked') actions.append(el('button', { class: 'btn sm', onclick: async () => { try { await API.customer.confirm(b.id); select('Bookings'); toast(t('app.profile.confirmedToast')); } catch (e) { errToast(e); } } }, t('app.common.confirm')));
+      if (upcoming) actions.append(el('button', { class: 'btn danger sm', onclick: async () => { if (!confirm(t('app.profile.cancelBookingConfirm'))) return; try { await API.customer.cancel(b.id); select('Bookings'); toast(t('app.toast.cancelled')); } catch (e) { errToast(e); } } }, t('app.common.cancel')));
       else if (b.status !== 'cancelled') {
         actions.append(rated[b.id]
           ? el('span', { class: 'stars' }, '★'.repeat(rated[b.id]) + '☆'.repeat(5 - rated[b.id]))
-          : el('button', { class: 'btn sm', onclick: () => openRate(b, () => select('Bookings')) }, 'Rate'));
+          : el('button', { class: 'btn sm', onclick: () => openRate(b, () => select('Bookings')) }, t('app.profile.rate')));
       }
       content.append(el('div', { class: 'choice', style: 'cursor:default' },
-        el('div', {}, el('strong', {}, b.service_name || 'Appointment'),
+        el('div', {}, el('strong', {}, b.service_name || t('app.common.appointment')),
           el('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 6px' },
             `${b.salon_name} · ${new Date(b.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}${b.staff_name ? ' · ' + b.staff_name : ''}`),
           statusPill(b.status)),
@@ -1438,17 +1438,17 @@ async function openCustomerProfile() {
     let favs = [];
     try { favs = await API.customer.favorites(); } catch (e) { content.innerHTML = ''; return content.append(el('div', { class: 'banner' }, e.message)); }
     content.innerHTML = '';
-    if (!favs.length) return content.append(el('div', { class: 'empty' }, 'No favorites yet. Tap the ♥ on a salon to save it.'));
+    if (!favs.length) return content.append(el('div', { class: 'empty' }, t('app.profile.noFavorites')));
     favs.map((r) => r.salon).filter(Boolean).forEach((s) => content.append(el('div', { class: 'choice' },
       el('a', { href: `/${s.slug}`, style: 'text-decoration:none;color:inherit' }, el('strong', {}, s.name),
         el('div', { class: 'muted', style: 'font-size:13px' }, [TYPE_LABELS[s.business_type], s.city].filter(Boolean).join(' · '))),
-      el('button', { class: 'btn ghost sm', onclick: async () => { try { await API.customer.removeFavorite(s.id); select('Favorites'); } catch (e) { errToast(e); } } }, 'Remove'))));
+      el('button', { class: 'btn ghost sm', onclick: async () => { try { await API.customer.removeFavorite(s.id); select('Favorites'); } catch (e) { errToast(e); } } }, t('app.common.remove')))));
   }
   async function tabReviews() {
     let revs = [];
     try { revs = await API.customer.myReviews(); } catch (e) { content.innerHTML = ''; return content.append(el('div', { class: 'banner' }, e.message)); }
     content.innerHTML = '';
-    if (!revs.length) return content.append(el('div', { class: 'empty' }, 'You haven\'t reviewed any appointments yet.'));
+    if (!revs.length) return content.append(el('div', { class: 'empty' }, t('app.profile.noReviews')));
     revs.forEach((r) => content.append(el('div', { class: 'choice', style: 'cursor:default' },
       el('div', {}, el('span', { class: 'stars' }, '★'.repeat(r.rating) + '☆'.repeat(5 - r.rating)),
         el('div', { style: 'font-weight:600;margin-top:4px' }, r.salon?.name || ''),
@@ -1459,10 +1459,10 @@ async function openCustomerProfile() {
     try { [prof, user] = await Promise.all([API.auth.profile(), API.auth.currentUser()]); } catch (e) { return errToast(e); }
     content.innerHTML = ''; const f = {};
     content.append(
-      field('Name', f.name = el('input', { value: prof?.full_name || '' })),
-      field('Phone', f.phone = el('input', { value: prof?.phone || '' })),
-      el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:12px' }, `Email: ${user?.email || ''}`),
-      el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null }); toast('Saved'); renderDirAuth(); } catch (e) { errToast(e); } } }, 'Save changes'));
+      field(t('app.common.name'), f.name = el('input', { value: prof?.full_name || '' })),
+      field(t('app.common.phone'), f.phone = el('input', { value: prof?.phone || '' })),
+      el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:12px' }, t('app.common.emailLabel', { email: user?.email || '' })),
+      el('button', { class: 'btn', onclick: async () => { try { await API.auth.updateProfile({ full_name: f.name.value.trim() || null, phone: f.phone.value.trim() || null }); toast(t('app.toast.saved')); renderDirAuth(); } catch (e) { errToast(e); } } }, t('app.common.saveChanges')));
   }
   select('Bookings');
 }
@@ -1474,40 +1474,40 @@ function openRate(booking, onDone) {
   const draw = () => [...stars.children].forEach((sp, i) => sp.classList.toggle('on', i < rating));
   for (let i = 1; i <= 5; i++) { const sp = el('span', { onclick: () => { rating = i; draw(); } }, '★'); stars.append(sp); }
   draw();
-  const comment = el('textarea', { rows: 3, placeholder: 'Optional: how was it?' });
+  const comment = el('textarea', { rows: 3, placeholder: t('app.rate.commentPh') });
   const wrap = el('div', {},
-    el('p', { style: 'margin-top:0' }, el('strong', {}, booking.service_name || 'Appointment'), el('span', { class: 'muted' }, ` · ${booking.salon_name}`)),
-    field('Your rating', stars), field('Comment', comment),
-    el('button', { class: 'btn block', onclick: save }, 'Submit review'));
-  const close = modal('Rate your visit', wrap);
+    el('p', { style: 'margin-top:0' }, el('strong', {}, booking.service_name || t('app.common.appointment')), el('span', { class: 'muted' }, ` · ${booking.salon_name}`)),
+    field(t('app.rate.yourRating'), stars), field(t('app.rate.comment'), comment),
+    el('button', { class: 'btn block', onclick: save }, t('app.rate.submit')));
+  const close = modal(t('app.rate.title'), wrap);
   async function save() {
     try { await API.customer.review({ appointmentId: booking.id, salonId: booking.salon_id, rating, comment: comment.value.trim() }); }
     catch (e) { return errToast(e); }
-    close(); toast('Thanks for the review!'); if (onDone) onDone();
+    close(); toast(t('app.rate.thanks')); if (onDone) onDone();
   }
 }
 
 async function openMyBookings() {
-  const wrap = el('div', {}, el('p', { class: 'muted' }, 'Loading…'));
-  const close = modal('My bookings', wrap, { wide: true });
+  const wrap = el('div', {}, el('p', { class: 'muted' }, t('app.common.loading')));
+  const close = modal(t('app.profile.myBookingsTitle'), wrap, { wide: true });
   let list = [];
   try { list = await API.customer.myBookings(); }
   catch (e) { wrap.innerHTML = ''; wrap.append(el('div', { class: 'banner' }, e.message)); return; }
   wrap.innerHTML = '';
-  if (!list.length) { wrap.append(el('div', { class: 'empty' }, 'No bookings yet. Browse salons and book your first appointment!')); return; }
+  if (!list.length) { wrap.append(el('div', { class: 'empty' }, t('app.profile.noBookings'))); return; }
   list.forEach((b) => {
     const upcoming = new Date(b.starts_at) > new Date() && b.status !== 'cancelled';
     wrap.append(el('div', { class: 'choice', style: 'cursor:default' },
       el('div', {},
-        el('strong', {}, b.service_name || 'Appointment'),
+        el('strong', {}, b.service_name || t('app.common.appointment')),
         el('div', { class: 'muted', style: 'font-size:13px;margin:2px 0 6px' },
           `${b.salon_name} · ${new Date(b.starts_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}${b.staff_name ? ' · ' + b.staff_name : ''}`),
         statusPill(b.status)),
       upcoming
         ? el('button', { class: 'btn danger sm', onclick: async () => {
-            if (!confirm('Cancel this booking?')) return;
-            try { await API.customer.cancel(b.id); close(); openMyBookings(); toast('Booking cancelled'); } catch (e) { errToast(e); }
-          } }, 'Cancel')
+            if (!confirm(t('app.profile.cancelBookingConfirm'))) return;
+            try { await API.customer.cancel(b.id); close(); openMyBookings(); toast(t('app.profile.bookingCancelled')); } catch (e) { errToast(e); }
+          } }, t('app.common.cancel'))
         : el('span', {}),
     ));
   });
@@ -1516,15 +1516,15 @@ async function openMyBookings() {
 function salonCard(s) {
   const unclaimed = !s.is_published && s.claimed === false;
   const badge = unclaimed
-    ? el('span', { class: 'type-pill', style: 'background:#FFF4E0;color:#8a5a00' }, 'Unclaimed')
-    : (s.is_published ? el('span', { class: 'type-pill', style: 'background:#E2F6F2;color:var(--mint)' }, 'Book online') : '');
+    ? el('span', { class: 'type-pill', style: 'background:#FFF4E0;color:#8a5a00' }, t('app.dir.unclaimed'))
+    : (s.is_published ? el('span', { class: 'type-pill', style: 'background:#E2F6F2;color:var(--mint)' }, t('app.dir.bookOnline')) : '');
   return el('a', { class: 'salon-card', href: `/${s.slug}` },
     el('div', { class: 'cover', style: s.cover_url ? `background-image:url("${String(s.cover_url).replace(/["'()\\]/g, '')}")` : '' }),
     el('div', { class: 'body' },
       el('h3', {}, s.name),
       el('div', { class: 'meta' }, [s.city, s.address].filter(Boolean).join(' · ') || ''),
       el('div', { style: 'margin-top:10px;display:flex;gap:6px;flex-wrap:wrap' },
-        el('span', { class: 'type-pill' }, TYPE_LABELS[s.business_type] || 'Salon'), badge),
+        el('span', { class: 'type-pill' }, TYPE_LABELS[s.business_type] || t('app.common.salon')), badge),
     ));
 }
 
@@ -1540,7 +1540,7 @@ function socialUrl(kind, v) {
   return `https://${v}`;
 }
 function socialLinks(salon) {
-  const defs = [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['facebook', 'Facebook'], ['website', 'Website']];
+  const defs = [['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['facebook', 'Facebook'], ['website', t('app.set.website')]];
   const links = defs
     .map(([k, label]) => { const u = socialUrl(k, salon[k]); return u ? el('a', { href: u, target: '_blank', rel: 'noopener', style: 'color:#fff;text-decoration:underline;font-size:13px;opacity:.95' }, label) : null; })
     .filter(Boolean);
@@ -1566,7 +1566,7 @@ async function warnIfBackToBack(startISO, durMin) {
       const gap = Math.max(s - newEnd, newStart - e);      // ≥0 means no overlap
       return gap >= 0 && gap <= GAP;
     });
-    if (adj) toast('Heads up: this is back-to-back with another of your bookings — leave travel time.');
+    if (adj) toast(t('app.book.backToBack'));
   } catch { /* non-blocking */ }
 }
 
@@ -1576,10 +1576,10 @@ async function warnIfBackToBack(startISO, durMin) {
 async function startStorefront(sl) {
   show('#screen-store');
   const root = $('#store-body');
-  if (!API.enabled) { root.append(el('div', { class: 'banner' }, 'This booking page is not connected to a backend yet.')); return; }
+  if (!API.enabled) { root.append(el('div', { class: 'banner' }, t('app.store.notConnected'))); return; }
   let salon;
   try { salon = await API.storefront.salon(sl); } catch (e) { return errToast(e); }
-  if (!salon) { root.append(el('div', { class: 'card empty' }, 'Booking page not found or not published.')); return; }
+  if (!salon) { root.append(el('div', { class: 'card empty' }, t('app.store.notFound'))); return; }
 
   const sf = { salon, service: null, staff: null, date: todayISO(), slot: null };
   const hero = el('div', { class: 'store-hero' },
@@ -1592,12 +1592,12 @@ async function startStorefront(sl) {
   // Unclaimed seed listing — no online booking set up yet. Offer to claim it.
   if (!salon.is_published) {
     root.append(el('div', { class: 'card', style: 'margin-top:18px;text-align:center' },
-      el('h3', { style: 'margin-bottom:8px' }, 'Not bookable online yet'),
-      el('p', { class: 'muted' }, 'This salon is listed in our directory but hasn\'t set up online booking.'),
+      el('h3', { style: 'margin-bottom:8px' }, t('app.store.notBookable')),
+      el('p', { class: 'muted' }, t('app.store.notBookableDesc')),
       el('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { sessionStorage.setItem('claim_slug', sl); location.href = '/app'; } },
-        'Is this your business? Claim this page'),
+        t('app.store.claim')),
       el('p', { class: 'muted', style: 'font-size:13px;margin-top:14px' },
-        salon.phone ? `In the meantime, you can call ${salon.phone}.` : 'Browse other salons in the meantime.')));
+        salon.phone ? t('app.store.callMeantime', { phone: salon.phone }) : t('app.store.browseMeantime'))));
     return;
   }
 
@@ -1610,9 +1610,9 @@ async function startStorefront(sl) {
     if (!user) return;
     let faved = false; try { faved = (await API.customer.favoriteIds()).includes(salon.id); } catch { /* */ }
     const btn = el('button', { class: 'btn sm', style: 'background:rgba(255,255,255,.18);color:#fff' });
-    const paint = () => { btn.textContent = faved ? '♥ Saved' : '♡ Save'; };
+    const paint = () => { btn.textContent = faved ? t('app.store.saved') : t('app.store.save'); };
     paint();
-    btn.onclick = async () => { try { faved ? await API.customer.removeFavorite(salon.id) : await API.customer.addFavorite(salon.id); faved = !faved; paint(); toast(faved ? 'Added to favorites' : 'Removed from favorites'); } catch (e) { errToast(e); } };
+    btn.onclick = async () => { try { faved ? await API.customer.removeFavorite(salon.id) : await API.customer.addFavorite(salon.id); faved = !faved; paint(); toast(faved ? t('app.store.addedFav') : t('app.store.removedFav')); } catch (e) { errToast(e); } };
     meta.append(btn);
   })();
 
@@ -1622,7 +1622,7 @@ async function startStorefront(sl) {
     if (!photos.length) return;
     const gal = el('div', { class: 'store-gallery' });
     photos.forEach((p) => gal.append(el('div', { class: 'pf-tile' }, el('img', { src: p.url, alt: p.caption || '' }), p.caption ? el('div', { class: 'pf-cap' }, p.caption) : '')));
-    galleryHost.append(el('div', { class: 'step' }, el('h3', {}, 'Recent work'), gal));
+    galleryHost.append(el('div', { class: 'step' }, el('h3', {}, t('app.dir.recentWork')), gal));
   }).catch(() => {});
 
   const flow = el('div'); root.append(flow);
@@ -1636,25 +1636,25 @@ async function startStorefront(sl) {
 
   function renderServices() {
     flow.innerHTML = '';
-    flow.append(bar(0), el('div', { class: 'step' }, el('h3', {}, 'Choose a service')));
-    if (!services.length) { flow.append(el('div', { class: 'card empty' }, 'No services available to book right now.')); return; }
+    flow.append(bar(0), el('div', { class: 'step' }, el('h3', {}, t('app.store.chooseService'))));
+    if (!services.length) { flow.append(el('div', { class: 'card empty' }, t('app.store.noServices'))); return; }
     services.forEach((s) => flow.append(el('div', { class: 'choice', onclick: () => { sf.service = s; renderStaff(); } },
       el('div', {}, el('strong', {}, s.name), s.description ? el('div', { class: 'muted', style: 'font-size:13px' }, s.description) : ''),
-      el('div', { style: 'text-align:right' }, el('div', {}, money(s.price, salon.currency)), el('div', { class: 'muted', style: 'font-size:13px' }, `${s.duration_min} min`)))));
+      el('div', { style: 'text-align:right' }, el('div', {}, money(s.price, salon.currency)), el('div', { class: 'muted', style: 'font-size:13px' }, t('app.common.minutes', { n: s.duration_min }))))));
   }
 
   async function renderStaff() {
     flow.innerHTML = '';
     flow.append(bar(1), el('div', { class: 'step' },
-      el('button', { class: 'btn ghost sm', onclick: renderServices }, '‹ Back'),
-      el('h3', { style: 'margin-top:10px' }, `Choose your ${salon.business_type === 'barber' ? 'barber' : 'specialist'}`)));
+      el('button', { class: 'btn ghost sm', onclick: renderServices }, t('app.common.back')),
+      el('h3', { style: 'margin-top:10px' }, t('app.store.chooseYour', { who: salon.business_type === 'barber' ? t('app.store.barber') : t('app.store.specialist') }))));
     let people = [];
     try { people = await API.storefront.staffForService(sf.service.id); } catch (e) { errToast(e); }
     flow.append(el('div', { class: 'choice', onclick: () => { sf.staff = null; renderSlots(); } },
-      el('div', {}, el('strong', {}, 'Any available'), el('div', { class: 'muted', style: 'font-size:13px' }, 'First free slot with any team member'))));
+      el('div', {}, el('strong', {}, t('app.store.anyAvailable')), el('div', { class: 'muted', style: 'font-size:13px' }, t('app.store.anyDesc')))));
     people.forEach((p) => flow.append(el('div', { class: 'choice', onclick: () => { sf.staff = p; renderSlots(); } },
       el('div', {}, el('strong', {}, p.name), p.title ? el('div', { class: 'muted', style: 'font-size:13px' }, p.title) : ''))));
-    if (!people.length) flow.append(el('div', { class: 'banner' }, 'No one is set up to perform this service online yet.'));
+    if (!people.length) flow.append(el('div', { class: 'banner' }, t('app.store.noStaff')));
   }
 
   async function renderSlots() {
@@ -1662,18 +1662,18 @@ async function startStorefront(sl) {
     const dateIn = el('input', { type: 'date', value: sf.date, min: todayISO(), style: 'max-width:200px' });
     dateIn.onchange = () => { sf.date = dateIn.value; loadSlots(); };
     flow.append(bar(2), el('div', { class: 'step' },
-      el('button', { class: 'btn ghost sm', onclick: renderStaff }, '‹ Back'),
-      el('h3', { style: 'margin-top:10px' }, 'Pick a time'),
-      el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, `${sf.service.name}${sf.staff ? ' with ' + sf.staff.name : ''} · ${sf.service.duration_min} min`),
+      el('button', { class: 'btn ghost sm', onclick: renderStaff }, t('app.common.back')),
+      el('h3', { style: 'margin-top:10px' }, t('app.store.pickTime')),
+      el('div', { class: 'muted', style: 'font-size:13px;margin-bottom:10px' }, `${sf.service.name}${sf.staff ? t('app.store.withName', { name: sf.staff.name }) : ''} · ` + t('app.common.minutes', { n: sf.service.duration_min })),
       dateIn));
     const slotBox = el('div', { style: 'margin-top:14px' }); flow.append(slotBox);
     async function loadSlots() {
-      slotBox.innerHTML = '<p class="muted">Loading times…</p>';
+      slotBox.innerHTML = '<p class="muted">' + t('app.store.loadingTimes') + '</p>';
       let slots = [];
       try { slots = await API.storefront.slots({ slug: sl, serviceId: sf.service.id, date: sf.date, staffId: sf.staff?.id || null }); }
       catch (e) { slotBox.innerHTML = ''; return errToast(e); }
       slotBox.innerHTML = '';
-      if (!slots.length) { slotBox.append(el('div', { class: 'card empty' }, 'No times available on this day. Try another date.')); return; }
+      if (!slots.length) { slotBox.append(el('div', { class: 'card empty' }, t('app.store.noTimes'))); return; }
       // de-dupe identical start times (across staff) when "any" is chosen
       const seen = new Set();
       const grid = el('div', { class: 'slot-grid' });
@@ -1690,18 +1690,18 @@ async function startStorefront(sl) {
     flow.innerHTML = '';
     const f = {};
     flow.append(bar(3), el('div', { class: 'step' },
-      el('button', { class: 'btn ghost sm', onclick: renderSlots }, '‹ Back'),
-      el('h3', { style: 'margin-top:10px' }, 'Your details'),
+      el('button', { class: 'btn ghost sm', onclick: renderSlots }, t('app.common.back')),
+      el('h3', { style: 'margin-top:10px' }, t('app.store.yourDetails')),
       el('div', { class: 'card', style: 'margin-bottom:14px;background:var(--paper-dim)' },
         el('strong', {}, sf.service.name), el('br'),
-        `${fmtDate(sf.slot.slot_start, salon.timezone)} at ${fmtTime(sf.slot.slot_start, salon.timezone)}`,
+        t('app.store.dateAtTime', { date: fmtDate(sf.slot.slot_start, salon.timezone), time: fmtTime(sf.slot.slot_start, salon.timezone) }),
         sf.staff ? ` · ${sf.staff.name}` : '', el('br'), money(sf.service.price, salon.currency)),
-      field('Name', f.name = el('input', { autocomplete: 'name' })),
-      field('Email', f.email = el('input', { type: 'email', autocomplete: 'email' })),
-      field('Phone', f.phone = el('input', { autocomplete: 'tel' })),
-      field('Notes (optional)', f.notes = el('textarea', { rows: 2 })),
-      f.consent = consentCheckbox('By booking, you agree to the'),
-      el('button', { class: 'btn block', onclick: confirmBooking }, 'Confirm booking')));
+      field(t('app.common.name'), f.name = el('input', { autocomplete: 'name' })),
+      field(t('app.common.email'), f.email = el('input', { type: 'email', autocomplete: 'email' })),
+      field(t('app.common.phone'), f.phone = el('input', { autocomplete: 'tel' })),
+      field(t('app.store.notesOptional'), f.notes = el('textarea', { rows: 2 })),
+      f.consent = consentCheckbox(t('app.consent.byBooking')),
+      el('button', { class: 'btn block', onclick: confirmBooking }, t('app.store.confirmBooking'))));
     // Prefill for a logged-in customer so they don't retype their details.
     if (API.enabled) (async () => {
       try {
@@ -1712,7 +1712,7 @@ async function startStorefront(sl) {
       } catch { /* ignore */ }
     })();
     async function confirmBooking() {
-      if (!f.name.value.trim()) return toast('Please enter your name', true);
+      if (!f.name.value.trim()) return toast(t('app.store.enterName'), true);
       if (!agreed(f.consent)) return;
       try {
         await API.storefront.book({
@@ -1730,9 +1730,9 @@ async function startStorefront(sl) {
     flow.innerHTML = '';
     flow.append(el('div', { class: 'card', style: 'text-align:center;padding:40px' },
       el('div', { style: 'font-size:48px' }, '✓'),
-      el('h2', { style: 'margin:10px 0' }, 'You\'re booked!'),
-      el('p', { class: 'muted' }, `${fmtDate(sf.slot.slot_start, salon.timezone)} at ${fmtTime(sf.slot.slot_start, salon.timezone)} for ${sf.service.name}.`),
-      el('button', { class: 'btn', style: 'margin-top:10px', onclick: () => { sf.service = sf.staff = sf.slot = null; renderServices(); } }, 'Book another')));
+      el('h2', { style: 'margin:10px 0' }, t('app.store.booked')),
+      el('p', { class: 'muted' }, t('app.store.dateAtTime', { date: fmtDate(sf.slot.slot_start, salon.timezone), time: fmtTime(sf.slot.slot_start, salon.timezone) }) + t('app.store.forService', { service: sf.service.name })),
+      el('button', { class: 'btn', style: 'margin-top:10px', onclick: () => { sf.service = sf.staff = sf.slot = null; renderServices(); } }, t('app.store.bookAnother'))));
   }
 
   renderServices();
