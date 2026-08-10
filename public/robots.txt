@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+# App/owner + interactive routes have no search value
+Disallow: /app
+Disallow: /demo
+Disallow: /confirm
+
+Sitemap: https://glowupbook.com/sitemap.xml
