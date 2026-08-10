@@ -1196,6 +1196,12 @@ grant execute on function public.confirm_my_appointment(uuid) to authenticated;
 -- ============================================================================
 alter table public.appointments add column if not exists reminded_at timestamptz;
 
+-- ===== 0014_messaging.sql =====
+-- Click-to-chat contact channels on the storefront (Instagram DM reuses instagram).
+alter table public.salons add column if not exists whatsapp text;
+alter table public.salons add column if not exists telegram text;
+alter table public.salons add column if not exists kakao text;
+
 -- ===== create_salon RPC =====
 -- ============================================================================
 -- Owner salon creation. Runs SECURITY DEFINER and stamps owner_id from the

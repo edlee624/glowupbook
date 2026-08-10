@@ -1154,6 +1154,16 @@ PAGES.settings = async (root) => {
       field('Facebook', f.facebook = el('input', { value: s.facebook || '', placeholder: t('app.set.fbPh') })),
       field(t('app.set.website'), f.website = el('input', { value: s.website || '', placeholder: 'https://…' })),
     ),
+    el('h3', { style: 'font-size:16px;margin:6px 0 10px' }, t('app.set.messaging')),
+    el('p', { class: 'muted', style: 'font-size:13px;margin:-4px 0 10px' }, t('app.set.messagingHelp')),
+    el('div', { class: 'row' },
+      field('WhatsApp', f.whatsapp = el('input', { value: s.whatsapp || '', placeholder: t('app.set.whatsappPh') })),
+      field('Telegram', f.telegram = el('input', { value: s.telegram || '', placeholder: t('app.set.telegramPh') })),
+    ),
+    el('div', { class: 'row' },
+      field('KakaoTalk', f.kakao = el('input', { value: s.kakao || '', placeholder: t('app.set.kakaoPh') })),
+      el('div', {}),
+    ),
     el('button', { class: 'btn', onclick: save }, t('app.set.save')),
   );
   root.append(card);
@@ -1166,6 +1176,8 @@ PAGES.settings = async (root) => {
         timezone: f.tz.value.trim() || 'UTC', currency: f.cur.value.trim() || 'USD',
         instagram: f.instagram.value.trim() || null, tiktok: f.tiktok.value.trim() || null,
         facebook: f.facebook.value.trim() || null, website: f.website.value.trim() || null,
+        whatsapp: f.whatsapp.value.trim() || null, telegram: f.telegram.value.trim() || null,
+        kakao: f.kakao.value.trim() || null,
       });
       toast(t('app.toast.saved')); navigate('settings');
     } catch (e) { errToast(e); }
@@ -1554,6 +1566,36 @@ function socialLinks(salon) {
   return row;
 }
 
+// Build a click-to-chat deep link from a stored handle/number/URL.
+function chatUrl(kind, v) {
+  if (!v) return null;
+  v = String(v).trim();
+  if (kind === 'whatsapp') { const num = v.replace(/[^0-9]/g, ''); return num.length >= 7 ? `https://wa.me/${num}` : null; }
+  if (kind === 'telegram') return /^https?:\/\//i.test(v) ? v : `https://t.me/${v.replace(/^@/, '')}`;
+  if (kind === 'kakao') return /^https?:\/\//i.test(v) ? v : `https://pf.kakao.com/${v.replace(/^@/, '')}`;
+  if (kind === 'instagram_dm') { const h = v.replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//i, '').replace(/\/$/, ''); return h ? `https://ig.me/m/${h}` : null; }
+  return null;
+}
+// "Message us" buttons for whichever channels the salon has set (Instagram DM
+// reuses the stored instagram handle). Renders nothing if none are set.
+function chatButtons(salon) {
+  const defs = [
+    ['whatsapp', salon.whatsapp, '💬 WhatsApp', '#25D366', '#fff'],
+    ['telegram', salon.telegram, '✈️ Telegram', '#229ED9', '#fff'],
+    ['kakao', salon.kakao, '💛 KakaoTalk', '#FEE500', '#3c1e1e'],
+    ['instagram_dm', salon.instagram, '📷 Instagram', '#E1306C', '#fff'],
+  ];
+  const btns = defs.map(([kind, val, label, bg, fg]) => {
+    const u = chatUrl(kind, val); if (!u) return null;
+    return el('a', { href: u, target: '_blank', rel: 'noopener',
+      style: `background:${bg};color:${fg};padding:9px 14px;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;display:inline-block` }, label);
+  }).filter(Boolean);
+  if (!btns.length) return document.createTextNode('');
+  return el('div', { style: 'margin-top:14px' },
+    el('div', { style: 'font-size:13px;opacity:.9;margin-bottom:8px' }, t('app.contact.title')),
+    el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' }, ...btns));
+}
+
 // Warn a logged-in customer when a just-booked appointment is back-to-back
 // (within 30 min) of another of their bookings — leave travel time.
 async function warnIfBackToBack(startISO, durMin) {
@@ -1590,7 +1632,7 @@ async function startStorefront(sl) {
     el('h1', {}, salon.name),
     salon.about ? el('p', { style: 'opacity:.92;margin:8px 0 0' }, salon.about) : '',
     el('p', { style: 'opacity:.85;margin:10px 0 0;font-size:14px' }, [salon.address, salon.phone, salon.email].filter(Boolean).join(' · ')),
-    socialLinks(salon));
+    socialLinks(salon), chatButtons(salon));
   root.append(hero);
 
   // Unclaimed seed listing — no online booking set up yet. Offer to claim it.
