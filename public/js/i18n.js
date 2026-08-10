@@ -10,8 +10,8 @@
 // visit. User/DB content (salon names, services) is never translated.
 // ============================================================================
 (function () {
-  const SUPPORTED = ['en', 'ru', 'ky'];
-  const NAMES = { en: 'English', ru: 'Русский', ky: 'Кыргызча' };
+  const SUPPORTED = ['en', 'ru', 'ky', 'tr', 'ko'];
+  const NAMES = { en: 'English', ru: 'Русский', ky: 'Кыргызча', tr: 'Türkçe', ko: '한국어' };
 
   const DICT = {
     en: {
@@ -609,6 +609,8 @@
     const nav = (navigator.language || 'en').toLowerCase();
     if (nav.startsWith('ru')) return 'ru';
     if (nav.startsWith('ky')) return 'ky';
+    if (nav.startsWith('tr')) return 'tr';
+    if (nav.startsWith('ko')) return 'ko';
     return 'en';
   }
 
@@ -616,14 +618,20 @@
     supported: SUPPORTED,
     names: NAMES,
     lang: detect(),
-    // Translate a key; checks the static DICT first, then the flat app.* dict,
-    // falling back to English, then the key itself. {var} interpolation.
+    // Translate a key. Lookup order: overlay languages (window.I18N_OVERLAY —
+    // tr/ko, flat), then the static DICT, then the flat app.* FLAT dict, then
+    // English, then the key itself. {var} interpolation.
     t(key, vars) {
-      const d = DICT[this.lang] || DICT.en;
       let s;
-      if (d[key] != null) s = d[key];
-      else if (FLAT[key]) s = FLAT[key][this.lang] != null ? FLAT[key][this.lang] : (FLAT[key].en != null ? FLAT[key].en : key);
-      else s = DICT.en[key] != null ? DICT.en[key] : key;
+      const ov = (typeof window !== 'undefined' && window.I18N_OVERLAY) ? window.I18N_OVERLAY[this.lang] : null;
+      if (ov && ov[key] != null) {
+        s = ov[key];
+      } else {
+        const d = DICT[this.lang] || DICT.en;
+        if (d[key] != null) s = d[key];
+        else if (FLAT[key]) s = FLAT[key][this.lang] != null ? FLAT[key][this.lang] : (FLAT[key].en != null ? FLAT[key].en : key);
+        else s = DICT.en[key] != null ? DICT.en[key] : key;
+      }
       if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
       return s;
     },
