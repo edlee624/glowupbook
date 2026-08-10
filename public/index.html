@@ -364,31 +364,34 @@
 <section id="screen-directory" class="screen">
   <header class="dir-nav">
     <a class="brand" href="/" style="text-decoration:none;color:inherit"><img src="/logo.png" class="brand-logo" alt=""> Glowup Book</a>
-    <div class="dir-auth" id="dir-auth"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <select class="lang-switch" aria-label="Language" style="padding:6px 8px;border-radius:8px;border:1px solid var(--line,#e3e0ea);background:#fff;font-size:13px;cursor:pointer"></select>
+      <div class="dir-auth" id="dir-auth"></div>
+    </div>
   </header>
   <div class="dir-hero">
     <img src="/logo.png" class="dir-hero-logo" alt="Glowup Book">
-    <h1>Find &amp; book beauty and nail salons near you</h1>
-    <p>Browse local salons, barbers and nail studios — and book in seconds.</p>
+    <h1 data-i18n="home.hero.h1">Find &amp; book beauty and nail salons near you</h1>
+    <p data-i18n="home.hero.sub">Browse local salons, barbers and nail studios — and book in seconds.</p>
     <div class="dir-search">
-      <input id="dir-q" placeholder="Search by name or city…">
+      <input id="dir-q" data-i18n-ph="home.search.ph" placeholder="Search by name or city…">
       <select id="dir-type">
-        <option value="">All types</option>
-        <option value="hair">Hair salons</option>
-        <option value="barber">Barber shops</option>
-        <option value="nails">Nail studios</option>
-        <option value="beauty">Beauty &amp; spa</option>
+        <option value="" data-i18n="type.all">All types</option>
+        <option value="hair" data-i18n="type.hair">Hair salons</option>
+        <option value="barber" data-i18n="type.barber">Barber shops</option>
+        <option value="nails" data-i18n="type.nails">Nail studios</option>
+        <option value="beauty" data-i18n="type.beauty">Beauty &amp; spa</option>
       </select>
     </div>
   </div>
   <div class="dir-carousel-band hidden" id="dir-carousel-band">
-    <div class="dir-carousel-head"><span>✨ Fresh looks from salons on Glowup Book</span></div>
+    <div class="dir-carousel-head"><span data-i18n="home.carousel.head">✨ Fresh looks from salons on Glowup Book</span></div>
     <div class="dir-carousel" id="dir-carousel"></div>
   </div>
   <div class="dir-wrap">
     <div class="dir-viewtoggle">
-      <button id="view-list" class="on">☰ List</button>
-      <button id="view-map">📍 Map</button>
+      <button id="view-list" class="on" data-i18n="home.view.list">☰ List</button>
+      <button id="view-map" data-i18n="home.view.map">📍 Map</button>
     </div>
     <div id="dir-map" class="dir-map hidden"></div>
     <div id="dir-grid" class="dir-grid"></div>
@@ -396,11 +399,11 @@
   <!-- How it works -->
   <section class="lp-how">
     <div class="lp-inner">
-      <h2 class="lp-h2">Book your next appointment in 3 steps</h2>
+      <h2 class="lp-h2" data-i18n="home.how.h2">Book your next appointment in 3 steps</h2>
       <div class="lp-steps">
-        <div class="lp-step"><div class="lp-num">1</div><h3>Find a salon</h3><p>Search by name, neighborhood or type — or browse the map.</p></div>
-        <div class="lp-step"><div class="lp-num">2</div><h3>Book in seconds</h3><p>Pick a service, your specialist and a time. No phone call.</p></div>
-        <div class="lp-step"><div class="lp-num">3</div><h3>Get confirmed</h3><p>Instant confirmation email, plus a reminder before your visit.</p></div>
+        <div class="lp-step"><div class="lp-num">1</div><h3 data-i18n="home.how.s1.h">Find a salon</h3><p data-i18n="home.how.s1.p">Search by name, neighborhood or type — or browse the map.</p></div>
+        <div class="lp-step"><div class="lp-num">2</div><h3 data-i18n="home.how.s2.h">Book in seconds</h3><p data-i18n="home.how.s2.p">Pick a service, your specialist and a time. No phone call.</p></div>
+        <div class="lp-step"><div class="lp-num">3</div><h3 data-i18n="home.how.s3.h">Get confirmed</h3><p data-i18n="home.how.s3.p">Instant confirmation email, plus a reminder before your visit.</p></div>
       </div>
     </div>
   </section>
@@ -409,24 +412,24 @@
   <section class="lp-owners">
     <div class="lp-inner lp-owners-grid">
       <div>
-        <span class="lp-eyebrow">For salon owners</span>
-        <h2 class="lp-h2" style="color:#fff">Run your whole salon in one place</h2>
-        <p style="opacity:.92;font-size:16px">Appointment calendar, customer records, staff & services — plus your own online booking page. Free to start.</p>
+        <span class="lp-eyebrow" data-i18n="home.owners.eyebrow">For salon owners</span>
+        <h2 class="lp-h2" style="color:#fff" data-i18n="home.owners.h2">Run your whole salon in one place</h2>
+        <p style="opacity:.92;font-size:16px" data-i18n="home.owners.p">Appointment calendar, customer records, staff & services — plus your own online booking page. Free to start.</p>
         <ul class="lp-benefits">
-          <li>📅 Calendar (day/week/month) with online booking</li>
-          <li>👥 Customer history, staff schedules & services</li>
-          <li>🔗 Your own page at <strong>glowupbook.com/your-salon</strong></li>
-          <li>✉️ Automatic booking confirmations &amp; reminders</li>
+          <li data-i18n="home.owners.b1">📅 Calendar (day/week/month) with online booking</li>
+          <li data-i18n="home.owners.b2">👥 Customer history, staff schedules & services</li>
+          <li data-i18n-html="home.owners.b3">🔗 Your own page at <strong>glowupbook.com/your-salon</strong></li>
+          <li data-i18n="home.owners.b4">✉️ Automatic booking confirmations &amp; reminders</li>
         </ul>
         <div class="lp-cta">
-          <a href="/demo" class="btn" style="background:#fff;color:var(--plum)">▶ Try the live demo</a>
-          <a href="/app" class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.5)">List your salon free →</a>
+          <a href="/demo" class="btn" style="background:#fff;color:var(--plum)" data-i18n="home.owners.cta.demo">▶ Try the live demo</a>
+          <a href="/app" class="btn ghost" style="color:#fff;border-color:rgba(255,255,255,.5)" data-i18n="home.owners.cta.list">List your salon free →</a>
         </div>
       </div>
       <div class="lp-owners-card">
-        <div class="lp-stat"><strong>10,000+</strong><span>NYC salons already listed</span></div>
-        <div class="lp-stat"><strong>$0</strong><span>to get started</span></div>
-        <div class="lp-stat"><strong>2 min</strong><span>to set up your page</span></div>
+        <div class="lp-stat"><strong>10,000+</strong><span data-i18n="home.owners.stat1">NYC salons already listed</span></div>
+        <div class="lp-stat"><strong>$0</strong><span data-i18n="home.owners.stat2">to get started</span></div>
+        <div class="lp-stat"><strong>2 min</strong><span data-i18n="home.owners.stat3">to set up your page</span></div>
       </div>
     </div>
   </section>
@@ -435,11 +438,11 @@
     <div class="lp-inner lp-foot-grid">
       <div>
         <div class="brand" style="font-size:20px"><img src="/logo.png" class="brand-logo" alt=""> Glowup Book</div>
-        <p class="muted" style="font-size:13px;margin:10px 0 0;max-width:260px">Find &amp; book beauty, hair and nail salons — and the tools to run them.</p>
+        <p class="muted" style="font-size:13px;margin:10px 0 0;max-width:260px" data-i18n="foot.tagline">Find &amp; book beauty, hair and nail salons — and the tools to run them.</p>
       </div>
-      <div class="lp-foot-col"><h4>Customers</h4><a href="/">Browse salons</a><a id="foot-account" href="#">My account</a></div>
-      <div class="lp-foot-col"><h4>Salon owners</h4><a href="/app">List your salon</a><a href="/demo">See the demo</a><a href="/app">Owner login</a></div>
-      <div class="lp-foot-col"><h4>Company</h4><a href="mailto:hello@glowupbook.com">Contact</a><a href="/app">Employee login</a><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a></div>
+      <div class="lp-foot-col"><h4 data-i18n="foot.customers">Customers</h4><a href="/" data-i18n="foot.browse">Browse salons</a><a id="foot-account" href="#" data-i18n="foot.account">My account</a></div>
+      <div class="lp-foot-col"><h4 data-i18n="foot.owners">Salon owners</h4><a href="/app" data-i18n="foot.list">List your salon</a><a href="/demo" data-i18n="foot.demo">See the demo</a><a href="/app" data-i18n="foot.ownerlogin">Owner login</a></div>
+      <div class="lp-foot-col"><h4 data-i18n="foot.company">Company</h4><a href="mailto:hello@glowupbook.com" data-i18n="foot.contact">Contact</a><a href="/app" data-i18n="foot.emplogin">Employee login</a><a href="/terms" data-i18n="foot.terms">Terms of Service</a><a href="/privacy" data-i18n="foot.privacy">Privacy Policy</a></div>
     </div>
     <div class="lp-foot-bottom"><span class="muted">© Glowup Book · glowupbook.com · <a href="/terms" style="color:inherit">Terms</a> · <a href="/privacy" style="color:inherit">Privacy</a></span></div>
   </footer>
@@ -487,6 +490,7 @@
 <!-- Supabase client (self-hosted) then config then API, then app -->
 <script src="/js/vendor/supabase.umd.js"></script>
 <script src="/config.js"></script>
+<script src="/js/i18n.js"></script>
 <script type="module" src="/js/glowbook-api.js"></script>
 <script type="module" src="/js/app.js"></script>
 </body>
