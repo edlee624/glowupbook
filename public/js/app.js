@@ -172,7 +172,6 @@ const LEGAL_UPDATED = '1 July 2026';
 const LEGAL = {
   terms: `
     <h1>Terms of Service</h1>
-    <p class="legal-date">Last updated: ${LEGAL_UPDATED}</p>
     <p>These Terms of Service ("Terms") govern your access to and use of Glowup Book (the "Platform"), operated by Glowup Book ("we", "us", "our"). By accessing or using the Platform, you agree to these Terms. If you do not agree, do not use the Platform.</p>
 
     <h2>1. What Glowup Book is (and is not)</h2>
@@ -219,7 +218,6 @@ const LEGAL = {
   `,
   privacy: `
     <h1>Privacy Policy</h1>
-    <p class="legal-date">Last updated: ${LEGAL_UPDATED}</p>
     <p>This Privacy Policy explains how Glowup Book ("we", "us") collects, uses, and shares information when you use our Platform.</p>
 
     <h2>1. Information we collect</h2>
@@ -277,7 +275,13 @@ function startLegal(page) {
     body.innerHTML = `<h1>${t('app.legal.legal')}</h1><p><a href="/terms">${t('app.legal.terms')}</a> · <a href="/privacy">${t('app.legal.privacy')}</a></p>`;
     return;
   }
-  body.innerHTML = LEGAL[page] || LEGAL.terms;
+  // Prefer the current language's translated doc (window.LEGAL_DOCS from
+  // legal.js); fall back to English, then to the inline LEGAL copy.
+  const docs = (window.LEGAL_DOCS && (window.LEGAL_DOCS[I18N.lang] || window.LEGAL_DOCS.en)) || null;
+  const content = (docs && docs[page]) || (window.LEGAL_DOCS && window.LEGAL_DOCS.en && window.LEGAL_DOCS.en[page]) || LEGAL[page] || LEGAL.terms;
+  const banner = `<div class="legal-note">${t('app.legal.draft')}</div>`;
+  const dateLine = `<p class="legal-date">${t('app.legal.updated', { date: LEGAL_UPDATED })}</p>`;
+  body.innerHTML = banner + dateLine + content;
 }
 
 // ===========================================================================

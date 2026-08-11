@@ -380,6 +380,8 @@
   "app.legal.legal": {"en": "Legal", "ru": "Правовая информация", "ky": "Укуктук маалымат"},
   "app.legal.terms": {"en": "Terms of Service", "ru": "Условия использования", "ky": "Колдонуу шарттары"},
   "app.legal.privacy": {"en": "Privacy Policy", "ru": "Политика конфиденциальности", "ky": "Купуялык саясаты"},
+  "app.legal.draft": {"en": "⚠️ Draft — this document is a general template pending review by a licensed attorney for your jurisdiction. It is not yet legal advice or a final agreement.", "ru": "⚠️ Черновик — этот документ является общим шаблоном и ожидает проверки лицензированным юристом для вашей юрисдикции. Он пока не является юридической консультацией или окончательным соглашением.", "ky": "⚠️ Долбоор — бул документ жалпы үлгү жана сиздин юрисдикцияңыз үчүн лицензиялуу юрист тарабынан текшерүүнү күтүүдө. Ал азырынча юридикалык кеңеш же акыркы келишим эмес."},
+  "app.legal.updated": {"en": "Last updated: {date}", "ru": "Последнее обновление: {date}", "ky": "Акыркы жаңыртуу: {date}"},
   "app.admin.title": {"en": "Admin", "ru": "Администрирование", "ky": "Башкаруу"},
   "app.admin.salons": {"en": "Salons", "ru": "Салоны", "ky": "Салондор"},
   "app.admin.claimed": {"en": "Claimed", "ru": "Закреплённые", "ky": "Бекитилген"},
