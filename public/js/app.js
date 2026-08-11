@@ -393,11 +393,11 @@ async function startAdmin() {
 function buildDemoData() {
   const uid = () => (crypto.randomUUID ? crypto.randomUUID() : 'd' + Math.random().toString(36).slice(2));
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/New_York'; } catch { return 'America/New_York'; } })();
-  const salon = { id: uid(), name: 'Demo Salon', slug: 'demo', business_type: 'hair', timezone: tz, currency: 'USD', is_published: true, claimed: true, about: 'A sample salon so you can explore the dashboard.', phone: '(212) 555-0100', email: 'demo@glowupbook.com', address: '123 Demo Ave', city: 'New York' };
+  const salon = { id: uid(), name: t('app.demo.salonName'), slug: 'demo', business_type: 'hair', timezone: tz, currency: 'USD', is_published: true, claimed: true, about: t('app.demo.salonAbout'), phone: '(212) 555-0100', email: 'demo@glowupbook.com', address: '123 Demo Ave', city: 'New York' };
   const svc = (name, dur, price) => ({ id: uid(), salon_id: salon.id, name, description: null, duration_min: dur, buffer_min: 0, price, is_active: true, bookable_online: true, sort_order: 0 });
-  const services = [svc("Women's Haircut", 45, 65), svc("Men's Haircut", 30, 35), svc('Balayage', 120, 180), svc('Gel Manicure', 45, 45), svc('Blowout', 30, 40)];
+  const services = [svc(t('app.demo.svc.womensCut'), 45, 65), svc(t('app.demo.svc.mensCut'), 30, 35), svc(t('app.demo.svc.balayage'), 120, 180), svc(t('app.demo.svc.gelMani'), 45, 45), svc(t('app.demo.svc.blowout'), 30, 40)];
   const mkStaff = (name, title, color) => ({ id: uid(), salon_id: salon.id, name, title, color, is_active: true, accepts_online_booking: true, sort_order: 0 });
-  const staff = [mkStaff('Jordan Lee', 'Senior Stylist', '#6C4AB6'), mkStaff('Riley Kim', 'Nail & Beauty Tech', '#FF6FA5'), mkStaff('Sam Alvarez', 'Barber', '#2BB6A3')];
+  const staff = [mkStaff('Jordan Lee', t('app.demo.title.senior'), '#6C4AB6'), mkStaff('Riley Kim', t('app.demo.title.nailTech'), '#FF6FA5'), mkStaff('Sam Alvarez', t('app.demo.title.barber'), '#2BB6A3')];
   const staffServices = { [staff[0].id]: [services[0].id, services[1].id, services[2].id, services[4].id], [staff[1].id]: [services[3].id, services[0].id], [staff[2].id]: [services[1].id] };
   const hours = []; staff.forEach((s) => { for (let d = 1; d <= 6; d++) hours.push({ id: uid(), salon_id: salon.id, staff_id: s.id, dow: d, start_time: '09:00', end_time: '18:00' }); });
   const cust = (name, email, phone) => ({ id: uid(), salon_id: salon.id, name, email, phone, notes: null });
