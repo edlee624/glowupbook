@@ -10,8 +10,12 @@
 // visit. User/DB content (salon names, services) is never translated.
 // ============================================================================
 (function () {
-  const SUPPORTED = ['en', 'ru', 'ky', 'tr', 'ko'];
+  const SUPPORTED = ['en', 'ru', 'ky', 'tr', 'ko'];   // engine can render all of these
   const NAMES = { en: 'English', ru: 'Русский', ky: 'Кыргызча', tr: 'Türkçe', ko: '한국어' };
+  // Languages actually offered in the UI / auto-redirect / hreflang. tr & ko are
+  // fully translated and still render at /tr/ /ko/ if visited directly, but are
+  // HIDDEN until those markets launch. To re-enable: add 'tr','ko' back here.
+  const VISIBLE = ['en', 'ru', 'ky'];
 
   // --- language-prefixed URLs: English at the root, others under /<lang>/ ------
   const PREFIXED = ['ru', 'ky', 'tr', 'ko'];
@@ -29,11 +33,11 @@
     if (urlLang()) return;
     let pref;
     try { pref = localStorage.getItem('glowbook_lang'); } catch (_) {}
-    if (!pref || !SUPPORTED.includes(pref)) {
+    if (!pref || !VISIBLE.includes(pref)) {
       const nav = (navigator.language || 'en').toLowerCase();
-      pref = PREFIXED.find((l) => nav.startsWith(l)) || 'en';
+      pref = VISIBLE.filter((l) => l !== 'en').find((l) => nav.startsWith(l)) || 'en';
     }
-    if (pref && PREFIXED.includes(pref)) {
+    if (pref && pref !== 'en' && VISIBLE.includes(pref)) {
       const bp = basePath();
       location.replace('/' + pref + (bp === '/' ? '/' : bp) + location.search + location.hash);
     }
@@ -683,7 +687,7 @@
     // Populate + wire any <select class="lang-switch"> found in the page.
     wireSwitchers() {
       document.querySelectorAll('select.lang-switch').forEach((sel) => {
-        sel.innerHTML = SUPPORTED.map((l) => `<option value="${l}"${l === this.lang ? ' selected' : ''}>${NAMES[l]}</option>`).join('');
+        sel.innerHTML = VISIBLE.map((l) => `<option value="${l}"${l === this.lang ? ' selected' : ''}>${NAMES[l]}</option>`).join('');
         sel.onchange = () => this.set(sel.value);
       });
     },
@@ -709,7 +713,7 @@
         l.rel = 'alternate'; l.hreflang = hreflang; l.href = href; l.setAttribute('data-i18n-alt', '');
         document.head.appendChild(l);
       };
-      SUPPORTED.forEach((l) => add(l, url(l)));
+      VISIBLE.forEach((l) => add(l, url(l)));
       add('x-default', url('en'));
       const can = document.querySelector('link[rel="canonical"]');
       if (can) can.href = url(this.lang);

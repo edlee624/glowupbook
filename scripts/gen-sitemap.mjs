@@ -26,7 +26,7 @@ async function allSlugs() {
 }
 
 const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const LANGS = ['en', 'ru', 'ky', 'tr', 'ko'];   // en = root, others prefixed
+const LANGS = ['en', 'ru', 'ky'];   // visible languages (tr/ko hidden until launch); en = root
 // hreflang alternates for a base path (e.g. '' for home, '/slug' for a salon).
 function alts(path) {
   const url = (l) => `${BASE}${l === 'en' ? '' : '/' + l}${path === '' && l !== 'en' ? '/' : path}`;
