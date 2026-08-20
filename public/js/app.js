@@ -312,7 +312,7 @@ function startLegal(page) {
 // ===========================================================================
 // DASHBOARD (authenticated)
 // ===========================================================================
-const state = { user: null, salon: null };
+const state = { user: null, salon: null, sub: null };
 
 function startDashboardApp() {
   if (!API.enabled) $('#cfg-banner').classList.remove('hidden');
@@ -364,6 +364,7 @@ async function afterLogin() {
       wireOnboarding(); show('#screen-onboarding'); return;
     }
     state.salon = claimed ? (mine.find((s) => s.slug === claimSlug) || mine[0]) : mine[0];
+    try { state.sub = await API.subscription.status(state.salon.id); } catch (e) { state.sub = { status: 'none' }; }
     wireAppShell();
     show('#screen-app');
     const billingReturn = new URLSearchParams(location.search).get('billing');
@@ -668,13 +669,53 @@ function wireAppShell() {
   $('#view-storefront').href = consumerUrl('/' + state.salon.slug);
 }
 
+// ---- subscription entitlement (free trial → then hard lock) ---------------
+const TRIAL_DAYS_CLIENT = 14;
+function trialDaysLeft() {
+  const created = state.salon?.created_at ? new Date(state.salon.created_at) : null;
+  if (!created || isNaN(created)) return null;
+  return Math.ceil(TRIAL_DAYS_CLIENT - (Date.now() - created.getTime()) / 864e5);
+}
+// Entitled = paid (active/trialing) OR still inside the free trial window.
+function isEntitled() {
+  if (state.demo) return true;
+  if (['active', 'trialing'].includes(state.sub?.status)) return true;
+  const left = trialDaysLeft();
+  return left === null ? true : left > 0;   // fail-open if created_at is unknown
+}
+function inFreeTrial() {
+  if (['active', 'trialing'].includes(state.sub?.status)) return false;
+  const left = trialDaysLeft();
+  return left !== null && left > 0;
+}
+
 const PAGES = {};
 function navigate(page) {
+  // Hard lock: once the free trial ends and there's no active subscription,
+  // every page except Billing is replaced by the subscribe wall.
+  if (!isEntitled() && page !== 'billing') page = 'locked';
   $$('.nav-item[data-page]').forEach((b) => b.classList.toggle('on', b.dataset.page === page));
   const root = $('#page');
   root.innerHTML = '';
+  if (inFreeTrial() && page !== 'locked' && page !== 'billing') {
+    const left = trialDaysLeft();
+    root.append(el('div', { class: 'banner', style: 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap' },
+      el('span', {}, t('app.billing.trialBanner', { n: left })),
+      el('a', { class: 'btn sm', href: '#', onclick: (e) => { e.preventDefault(); navigate('billing'); } }, t('app.billing.subscribe'))));
+  }
   (PAGES[page] || PAGES.calendar)(root);
 }
+
+// The subscribe wall shown when the trial has lapsed with no active plan.
+PAGES.locked = (root) => {
+  const s = state.salon;
+  root.append(el('div', { class: 'card', style: 'max-width:520px;margin:40px auto;text-align:center;padding:36px' },
+    el('div', { style: 'font-size:44px' }, '🔒'),
+    el('h2', { style: 'margin:10px 0' }, t('app.billing.lockTitle')),
+    el('p', { class: 'muted', style: 'margin:8px 0 18px' }, t('app.billing.lockBlurb')),
+    el('button', { class: 'btn', onclick: async () => { try { await API.subscription.checkout(s.id); } catch (e) { errToast(e); } } }, t('app.billing.subscribe')),
+    el('p', { style: 'margin-top:10px' }, el('a', { class: 'muted', style: 'font-size:13px', href: '#', onclick: (e) => { e.preventDefault(); navigate('billing'); } }, t('app.billing.manage')))));
+};
 
 // ---- CALENDAR (day / week / month) ----------------------------------------
 const CAL_H0 = 7, CAL_H1 = 21;   // hour grid range (7am–9pm)
