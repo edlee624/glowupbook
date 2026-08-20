@@ -452,8 +452,31 @@ const employee = {
   },
 };
 
+// Platform subscription (the salon owner pays to use Glowup Book).
+const subscription = {
+  async status(salonId) {
+    if (!supabase) return { status: 'none' };
+    const { data } = await client().from('subscriptions').select('status,price_id,current_period_end').eq('salon_id', salonId).maybeSingle();
+    return data || { status: 'none' };
+  },
+  // Start Stripe Checkout (subscription) — redirects to Stripe on success.
+  async checkout(salonId) {
+    const { data, error } = await client().functions.invoke('manage-subscription', { body: { action: 'checkout', salon_id: salonId } });
+    if (error) throw error;
+    if (!data?.url) throw new Error(data?.error || 'Could not start checkout');
+    location.href = data.url;
+  },
+  // Open the Stripe Customer Portal (manage/cancel/invoices) — redirects to Stripe.
+  async portal(salonId) {
+    const { data, error } = await client().functions.invoke('manage-subscription', { body: { action: 'portal', salon_id: salonId } });
+    if (error) throw error;
+    if (!data?.url) throw new Error(data?.error || 'Could not open billing portal');
+    location.href = data.url;
+  },
+};
+
 window.GlowbookAPI = {
   enabled,
   raw: supabase,
-  auth, salons, services, staff, hours, customers, appointments, storefront, customer, employee, admin,
+  auth, salons, services, staff, hours, customers, appointments, storefront, customer, employee, admin, subscription,
 };

@@ -1202,6 +1202,31 @@ alter table public.salons add column if not exists whatsapp text;
 alter table public.salons add column if not exists telegram text;
 alter table public.salons add column if not exists kakao text;
 
+-- ===== 0015_subscriptions.sql =====
+-- Platform SaaS billing. Members read; only the Stripe webhook (service role) writes.
+create table if not exists public.subscriptions (
+  salon_id               uuid primary key references public.salons(id) on delete cascade,
+  stripe_customer_id     text,
+  stripe_subscription_id text,
+  status                 text not null default 'none',
+  price_id               text,
+  current_period_end     timestamptz,
+  updated_at             timestamptz not null default now()
+);
+alter table public.subscriptions enable row level security;
+drop policy if exists "subs: member read" on public.subscriptions;
+create policy "subs: member read" on public.subscriptions
+  for select using (public.is_salon_member(salon_id));
+create or replace function public.salon_is_subscribed(p_salon uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.subscriptions s
+    where s.salon_id = p_salon and s.status in ('trialing', 'active')
+      and (s.current_period_end is null or s.current_period_end > now())
+  );
+$$;
+grant execute on function public.salon_is_subscribed(uuid) to anon, authenticated;
+
 -- ===== create_salon RPC =====
 -- ============================================================================
 -- Owner salon creation. Runs SECURITY DEFINER and stamps owner_id from the

@@ -359,14 +359,21 @@ async function afterLogin() {
     if (!claimed && prof?.role === 'staff') { startEmployee(prof); return; }
     const mine = await API.salons.mine();
     if (!mine.length) {
-      // A customer account has no salon — send them to the public directory.
-      if (prof?.role === 'customer') { location.href = '/'; return; }
+      // A customer account has no salon — send them to the consumer site.
+      if (prof?.role === 'customer') { location.href = consumerUrl('/'); return; }
       wireOnboarding(); show('#screen-onboarding'); return;
     }
     state.salon = claimed ? (mine.find((s) => s.slug === claimSlug) || mine[0]) : mine[0];
     wireAppShell();
     show('#screen-app');
-    navigate(claimed ? 'settings' : 'calendar');
+    const billingReturn = new URLSearchParams(location.search).get('billing');
+    if (billingReturn) {
+      history.replaceState(null, '', location.pathname);
+      if (billingReturn === 'success') toast(t('app.billing.thanks'));
+      navigate('billing');
+    } else {
+      navigate(claimed ? 'settings' : 'calendar');
+    }
   } catch (e) { errToast(e); }
 }
 
@@ -461,6 +468,11 @@ function makeDemoApi(D) {
       async remove(id) { D.appts = D.appts.filter((x) => x.id !== id); },
       async requestConfirmation(id) { const r = D.appts.find((x) => x.id === id); if (r) r.confirmation_requested_at = new Date().toISOString(); return clone(r); },
       async sendConfirmationEmail() { return { ok: true }; },
+    },
+    subscription: {
+      async status() { return { status: 'active', current_period_end: new Date(Date.now() + 30 * 864e5).toISOString() }; },
+      async checkout() { toast(t('app.demo.signupToast')); },
+      async portal() { toast(t('app.demo.signupToast')); },
     },
   };
 }
@@ -1228,6 +1240,35 @@ PAGES.settings = async (root) => {
     try { state.salon = await API.salons.update(s.id, { is_published: !s.is_published }); toast(state.salon.is_published ? t('app.set.pageLive') : t('app.set.pageOffline')); navigate('settings'); }
     catch (e) { errToast(e); }
   }
+};
+
+// ---- BILLING (platform subscription) --------------------------------------
+PAGES.billing = async (root) => {
+  const s = state.salon;
+  root.append(el('div', { class: 'page-head' }, el('h1', {}, t('app.billing.title'))));
+  const card = el('div', { class: 'card', style: 'max-width:560px' }, el('p', { class: 'muted' }, t('app.common.loading')));
+  root.append(card);
+  let sub = { status: 'none' };
+  try { sub = await API.subscription.status(s.id); } catch (e) { /* show as none */ }
+  const active = ['active', 'trialing'].includes(sub.status);
+  card.innerHTML = '';
+  card.append(
+    el('div', { style: 'display:flex;align-items:center;gap:10px;margin-bottom:6px' },
+      el('span', { style: 'font-weight:700;font-size:16px' }, t('app.billing.plan')),
+      el('span', { class: 'type-pill', style: active ? 'background:#E2F6F2;color:var(--mint)' : 'background:#FBE6EC;color:#c0335c' },
+        t('app.billing.status.' + (sub.status || 'none')))),
+    sub.current_period_end ? el('p', { class: 'muted', style: 'font-size:13px' }, t('app.billing.renews', { date: fmtDate(sub.current_period_end, s.timezone) })) : '',
+    el('p', { class: 'muted', style: 'font-size:14px;margin:12px 0' }, active ? t('app.billing.activeBlurb') : t('app.billing.inactiveBlurb')));
+  const actions = el('div', { style: 'display:flex;gap:10px;flex-wrap:wrap;margin-top:6px' });
+  const goCheckout = async () => { try { await API.subscription.checkout(s.id); } catch (e) { errToast(e); } };
+  const goPortal = async () => { try { await API.subscription.portal(s.id); } catch (e) { errToast(e); } };
+  if (active) {
+    actions.append(el('button', { class: 'btn', onclick: goPortal }, t('app.billing.manage')));
+  } else {
+    actions.append(el('button', { class: 'btn', onclick: goCheckout }, t('app.billing.subscribe')));
+    if (sub.stripe_customer_id || sub.status === 'past_due' || sub.status === 'canceled') actions.append(el('button', { class: 'btn ghost', onclick: goPortal }, t('app.billing.manage')));
+  }
+  card.append(actions, el('p', { class: 'muted', style: 'font-size:12px;margin-top:14px' }, t('app.billing.securedByStripe')));
 };
 
 // ===========================================================================
