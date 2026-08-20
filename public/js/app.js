@@ -137,16 +137,41 @@ function storefrontSlug(path) {
 // salon directory.
 const APP_PATHS = new Set(['app', 'login', 'log-in', 'signin', 'sign-in', 'dashboard', 'admin', 'account']);
 
+// ---- host split: consumer (glowupbook.com) vs business CRM (biz.glowupbook.com)
+const CRM_HOST = 'biz.glowupbook.com';
+const CONSUMER_HOST = 'glowupbook.com';
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+function onCrmHost() {
+  const h = location.hostname;
+  if (h === CRM_HOST || h.startsWith('biz.')) return true;
+  if (IS_LOCAL) { try { return localStorage.getItem('__crm') === '1'; } catch (_) { return false; } }  // dev toggle
+  return false;
+}
+function langPrefix() { return (window.I18N && I18N.urlLang && I18N.urlLang()) ? '/' + I18N.urlLang() : ''; }
+// Absolute URL on the CRM / consumer host (relative on localhost to avoid jumping to prod).
+function crmUrl(p) { return (IS_LOCAL ? '' : 'https://' + CRM_HOST) + langPrefix() + p; }
+function consumerUrl(p) { return (IS_LOCAL ? '' : 'https://' + CONSUMER_HOST) + langPrefix() + p; }
+
 async function boot() {
   const path = routePath();   // language prefix stripped
   const cm = path.match(/^\/confirm\/([0-9a-fA-F-]{8,})/);
   if (cm) return startConfirm(cm[1]);
+  const p = path.replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (p === 'terms' || p === 'privacy' || p === 'legal') return startLegal(p);   // legal is universal
+
+  if (onCrmHost()) {
+    // Business host → the CRM. Storefronts belong on the consumer site.
+    const sl = storefrontSlug(path);
+    if (sl) { if (IS_LOCAL) return startStorefront(sl); location.href = consumerUrl('/' + sl); return; }
+    if (p === 'demo') return startDemo();
+    return startDashboardApp();   // root + owner/staff/admin
+  }
+
+  // Consumer host → directory + storefronts. The CRM moved to biz.
   const sl = storefrontSlug(path);
   if (sl) return startStorefront(sl);
-  const p = path.replace(/^\/+|\/+$/g, '').toLowerCase();
-  if (p === 'demo') return startDemo();
-  if (p === 'terms' || p === 'privacy' || p === 'legal') return startLegal(p);
-  if (APP_PATHS.has(p)) return startDashboardApp();
+  if (p === 'demo') { if (IS_LOCAL) return startDemo(); location.href = crmUrl('/demo'); return; }
+  if (APP_PATHS.has(p)) { if (IS_LOCAL) return startDashboardApp(); location.href = crmUrl('/' + p) + location.search; return; }
   startDirectory();   // root (and any other public path) → directory
 }
 
@@ -316,9 +341,11 @@ function startDashboardApp() {
 
 async function afterLogin() {
   try {
-    // Pending "claim this salon" intent from a storefront listing.
+    // Pending "claim this salon" intent from a storefront listing. The slug
+    // arrives via ?claim= (cross-subdomain from the consumer storefront) or
+    // sessionStorage (same-origin fallback).
     let claimed = false;
-    const claimSlug = sessionStorage.getItem('claim_slug');
+    const claimSlug = new URLSearchParams(location.search).get('claim') || sessionStorage.getItem('claim_slug');
     if (claimSlug) {
       sessionStorage.removeItem('claim_slug');
       try {
@@ -614,8 +641,8 @@ function wireOnboarding() {
 function wireAppShell() {
   $$('.nav-item[data-page]').forEach((b) => (b.onclick = () => navigate(b.dataset.page)));
   $('#signout').onclick = async () => { await API.auth.signOut(); location.reload(); };
-  const link = `${location.origin}/${state.salon.slug}`;
-  $('#view-storefront').href = link;
+  // The storefront lives on the consumer site, even though the dashboard is on biz.
+  $('#view-storefront').href = consumerUrl('/' + state.salon.slug);
 }
 
 const PAGES = {};
@@ -1106,7 +1133,7 @@ async function openHoursModal(s, refresh) {
 function openLinkEmployee(refresh) {
   const f = {};
   const salonName = state.salon?.name || t('app.staff.ourSalon');
-  const signupUrl = `${location.origin}/`;
+  const signupUrl = consumerUrl('/');   // employees register on the consumer site
   const msg = t('app.staff.inviteMsg', { salon: salonName, url: signupUrl });
   const isEmail = (v) => /@/.test(v || '');
   const wrap = el('div', {},
@@ -1130,7 +1157,7 @@ function openLinkEmployee(refresh) {
 PAGES.settings = async (root) => {
   const s = state.salon;
   root.append(el('div', { class: 'page-head' }, el('h1', {}, t('app.set.title'))));
-  const link = `${location.origin}/${s.slug}`;
+  const link = consumerUrl('/' + s.slug);
   const f = {};
   const card = el('div', { class: 'card', style: 'max-width:560px' },
     el('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px' },
@@ -1354,7 +1381,7 @@ async function renderDirAuth() {
   } else {
     box.append(
       el('button', { class: 'btn sm', onclick: () => openCustomerAuth(renderDirAuth) }, t('app.dir.loginSignup')),
-      el('a', { class: 'btn ghost sm', href: '/app' }, t('app.dir.forOwners')),
+      el('a', { class: 'btn ghost sm', href: crmUrl('/app') }, t('app.dir.forOwners')),
     );
   }
 }
@@ -1644,7 +1671,7 @@ async function startStorefront(sl) {
     root.append(el('div', { class: 'card', style: 'margin-top:18px;text-align:center' },
       el('h3', { style: 'margin-bottom:8px' }, t('app.store.notBookable')),
       el('p', { class: 'muted' }, t('app.store.notBookableDesc')),
-      el('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { sessionStorage.setItem('claim_slug', sl); location.href = '/app'; } },
+      el('button', { class: 'btn', style: 'margin-top:8px', onclick: () => { sessionStorage.setItem('claim_slug', sl); location.href = crmUrl('/app') + '?claim=' + encodeURIComponent(sl); } },
         t('app.store.claim')),
       el('p', { class: 'muted', style: 'font-size:13px;margin-top:14px' },
         salon.phone ? t('app.store.callMeantime', { phone: salon.phone }) : t('app.store.browseMeantime'))));
