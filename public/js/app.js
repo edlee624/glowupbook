@@ -670,7 +670,7 @@ function wireAppShell() {
 }
 
 // ---- subscription entitlement (free trial → then hard lock) ---------------
-const TRIAL_DAYS_CLIENT = 14;
+const TRIAL_DAYS_CLIENT = 30;
 function trialDaysLeft() {
   const created = state.salon?.created_at ? new Date(state.salon.created_at) : null;
   if (!created || isNaN(created)) return null;
