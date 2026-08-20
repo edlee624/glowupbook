@@ -559,14 +559,25 @@ async function startEmployee(prof) {
 
 // ---- auth screen ----------------------------------------------------------
 function wireAuthScreen() {
-  let mode = 'login';
+  let mode = 'login', role = 'owner';
   const consent = consentCheckbox();
   $('#au-submit').before(consent);
+  // Signup role chooser: salon owner vs employee. Employees self-register here on
+  // biz (same origin as their profile), then a salon admin links them by email.
+  const roleOwner = el('button', { type: 'button', class: 'on' }, t('app.auth.roleOwner'));
+  const roleEmp = el('button', { type: 'button' }, t('app.auth.roleEmployee'));
+  const roleRow = el('div', { class: 'field' }, el('label', {}, t('app.auth.signupAs')), el('div', { class: 'tabs' }, roleOwner, roleEmp));
+  const empHint = el('p', { class: 'muted hidden', style: 'font-size:13px;margin:-4px 0 10px' }, t('app.dir.empBlurb'));
+  $('#name-field').before(roleRow, empHint);
+  const setRole = (r) => { role = r; roleOwner.classList.toggle('on', r === 'owner'); roleEmp.classList.toggle('on', r === 'staff'); empHint.classList.toggle('hidden', mode === 'login' || r !== 'staff'); };
+  roleOwner.onclick = () => setRole('owner'); roleEmp.onclick = () => setRole('staff');
   const setMode = (m) => {
     mode = m;
     $('#tab-login').classList.toggle('on', m === 'login');
     $('#tab-signup').classList.toggle('on', m === 'signup');
     $('#name-field').classList.toggle('hidden', m === 'login');
+    roleRow.classList.toggle('hidden', m === 'login');
+    empHint.classList.toggle('hidden', m === 'login' || role !== 'staff');
     consent.classList.toggle('hidden', m === 'login');
     $('#au-submit').textContent = m === 'login' ? t('app.auth.login') : t('app.auth.createAccount');
     $('#au-pass').autocomplete = m === 'login' ? 'current-password' : 'new-password';
@@ -581,7 +592,7 @@ function wireAuthScreen() {
     if (mode === 'signup' && !agreed(consent)) return;
     try {
       if (mode === 'signup') {
-        const res = await API.auth.signUp({ email, password, fullName: $('#au-name').value.trim() });
+        const res = await API.auth.signUp({ email, password, fullName: $('#au-name').value.trim(), role });
         if (!res?.session) { setMode('login'); showEmailConfirmNotice($('.auth-card'), email); toast(t('app.auth.checkEmail')); return; }
       } else {
         await API.auth.signIn({ email, password });
@@ -1133,7 +1144,7 @@ async function openHoursModal(s, refresh) {
 function openLinkEmployee(refresh) {
   const f = {};
   const salonName = state.salon?.name || t('app.staff.ourSalon');
-  const signupUrl = consumerUrl('/');   // employees register on the consumer site
+  const signupUrl = crmUrl('/app');   // employees register on the business site (biz)
   const msg = t('app.staff.inviteMsg', { salon: salonName, url: signupUrl });
   const isEmail = (v) => /@/.test(v || '');
   const wrap = el('div', {},
@@ -1387,34 +1398,29 @@ async function renderDirAuth() {
 }
 
 function openCustomerAuth(onDone) {
-  let mode = 'login', role = 'customer';
+  // Consumer site → customer accounts only. Owners/staff use biz.glowupbook.com.
+  let mode = 'login';
   const f = {};
   const nameField = field(t('app.dir.yourName'), f.name = el('input', { autocomplete: 'name' }));
   const submitBtn = el('button', { class: 'btn block', onclick: submit }, t('app.auth.login'));
   const tabLogin = el('button', { class: 'on' }, t('app.auth.login'));
   const tabSignup = el('button', {}, t('app.auth.signup'));
   const consent = consentCheckbox();
-  // role chooser (signup only): customer vs employee
-  const roleCust = el('button', { class: 'on' }, t('app.dir.imCustomer'));
-  const roleEmp = el('button', {}, t('app.dir.imEmployee'));
-  const roleRow = field(t('app.dir.iWantTo'), el('div', { class: 'tabs' }, roleCust, roleEmp));
   const blurb = el('p', { class: 'muted', style: 'margin-top:0;font-size:14px' }, t('app.dir.custBlurb'));
-  const wrap = el('div', {}, blurb, el('div', { class: 'tabs' }, tabLogin, tabSignup), roleRow, nameField,
+  const ownerLink = el('p', { class: 'muted', style: 'font-size:13px;margin-top:10px;text-align:center' },
+    el('a', { href: crmUrl('/app') }, t('app.dir.forOwners')));
+  const wrap = el('div', {}, blurb, el('div', { class: 'tabs' }, tabLogin, tabSignup), nameField,
     field(t('app.common.email'), f.email = el('input', { type: 'email', autocomplete: 'email' })),
-    field(t('app.common.password'), f.pass = el('input', { type: 'password' })), consent, submitBtn);
-  const setRole = (r) => { role = r; roleCust.classList.toggle('on', r === 'customer'); roleEmp.classList.toggle('on', r === 'staff');
-    blurb.textContent = r === 'staff' ? t('app.dir.empBlurb') : t('app.dir.custBlurb'); };
-  roleCust.onclick = () => setRole('customer'); roleEmp.onclick = () => setRole('staff');
+    field(t('app.common.password'), f.pass = el('input', { type: 'password' })), consent, submitBtn, ownerLink);
   const setMode = (m) => {
     mode = m;
     tabLogin.classList.toggle('on', m === 'login'); tabSignup.classList.toggle('on', m === 'signup');
-    roleRow.classList.toggle('hidden', m === 'login');
     nameField.classList.toggle('hidden', m === 'login');
     consent.classList.toggle('hidden', m === 'login');
     submitBtn.textContent = m === 'login' ? t('app.auth.login') : t('app.auth.createAccount');
   };
   tabLogin.onclick = () => setMode('login'); tabSignup.onclick = () => setMode('signup');
-  setRole('customer'); setMode('login');
+  setMode('login');
   const close = modal(t('app.dir.yourAccount'), wrap);
   async function submit() {
     const email = f.email.value.trim(), password = f.pass.value;
@@ -1422,18 +1428,17 @@ function openCustomerAuth(onDone) {
     if (mode === 'signup' && !agreed(consent)) return;
     try {
       if (mode === 'signup') {
-        const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role });
+        const res = await API.auth.signUp({ email, password, fullName: f.name.value.trim(), role: 'customer' });
         if (!res?.session) { showEmailConfirmNotice(wrap, email); toast(t('app.auth.checkEmail')); return; }
         close();
-        if (role === 'staff') { location.href = '/app'; return; }   // employee → their profile
       } else {
         await API.auth.signIn({ email, password });
         toast(t('app.dir.welcomeBack'));
         close();
       }
-      // a logged-in employee/owner/admin shouldn't stay on the directory account UI
+      // An owner/staff/admin who signs in here belongs on the business site.
       const prof = await API.auth.profile();
-      if (prof && prof.role !== 'customer') { location.href = '/app'; return; }
+      if (prof && prof.role !== 'customer') { location.href = crmUrl('/app'); return; }
       if (onDone) onDone();
     } catch (e) {
       if (/confirm/i.test(e?.message || '')) { showEmailConfirmNotice(wrap, email, { prefix: t('app.auth.confirmFirst') }); return; }
