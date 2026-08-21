@@ -18,12 +18,16 @@ const supa = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_
 async function syncFromSubscription(sub: Stripe.Subscription) {
   const salonId = (sub.metadata?.salon_id as string) || null;
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+  // In API 2025-03-31.basil the period end moved onto the subscription item.
+  const periodEnd = (sub as { current_period_end?: number }).current_period_end
+    ?? sub.items?.data?.[0]?.current_period_end
+    ?? null;
   const patch = {
     stripe_subscription_id: sub.id,
     stripe_customer_id: customerId,
     status: sub.status, // trialing | active | past_due | canceled | unpaid | incomplete
     price_id: sub.items?.data?.[0]?.price?.id ?? null,
-    current_period_end: sub.current_period_end ? new Date(sub.current_period_end * 1000).toISOString() : null,
+    current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
     updated_at: new Date().toISOString(),
   };
   if (salonId) await supa.from("subscriptions").upsert({ salon_id: salonId, ...patch });
